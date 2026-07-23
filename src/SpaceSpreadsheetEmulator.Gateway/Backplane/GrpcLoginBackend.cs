@@ -81,6 +81,36 @@ public sealed class GrpcLoginBackend : ILoginBackend, IDisposable
         return string.IsNullOrEmpty(response.Error?.Code) ? response : null;
     }
 
+    public async Task<StationCatalogResponse?> GetStationCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken)
+    {
+        StationCatalogResponse response = await client.GetStationCatalogAsync(
+            new StationCatalogRequest
+            {
+                Context = CreateContext(gatewaySessionId),
+                LoginTicket = ByteString.CopyFrom(loginTicket.Span),
+            },
+            cancellationToken: cancellationToken);
+        return string.IsNullOrEmpty(response.Error?.Code) ? response : null;
+    }
+
+    public async Task<NpcAgentCatalogResponse?> GetNpcAgentCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken)
+    {
+        NpcAgentCatalogResponse response = await client.GetNpcAgentCatalogAsync(
+            new NpcAgentCatalogRequest
+            {
+                Context = CreateContext(gatewaySessionId),
+                LoginTicket = ByteString.CopyFrom(loginTicket.Span),
+            },
+            cancellationToken: cancellationToken);
+        return string.IsNullOrEmpty(response.Error?.Code) ? response : null;
+    }
+
     public async Task CloseSessionAsync(
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,

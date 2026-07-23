@@ -169,12 +169,23 @@ internal static class Build3396210CharacterSelectionMapper
                 || !names.Add(character.Name)
                 || character.SkillPoints is < int.MinValue or > int.MaxValue
                 || character.CharacterTypeId <= 0
+                || character.CharacterGroupId <= 0
+                || character.CharacterCategoryId <= 0
                 || character.BloodlineId is <= 0 or > byte.MaxValue
                 || character.RaceId is <= 0 or > byte.MaxValue
                 || character.CorporationId <= 0
+                || character.HeadquartersStationId <= 0
                 || character.ShipTypeId <= 0
+                || character.ShipGroupId <= 0
+                || character.ShipCategoryId <= 0
                 || character.SolarSystemId <= 0
                 || (character.HasStationId && character.StationId <= 0)
+                || (character.HasStationId
+                    && (character.StationOwnerId <= 0
+                        || character.StationOperationId <= 0
+                        || character.StationTypeId <= 0
+                        || character.StationGroupId <= 0
+                        || character.StationCategoryId <= 0))
                 || character.ShipId <= 0
                 || character.LastLoginUnixMilliseconds is < 0 or > 253_402_300_799_999
                 || !decimal.TryParse(

@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using SpaceSpreadsheetEmulator.Worker.IntegrationTests.Support;
 
 namespace SpaceSpreadsheetEmulator.Worker.IntegrationTests.Health;
@@ -9,7 +7,7 @@ public class WorkerHealthTests
     [Fact]
     public async Task LiveAndReadyEndpointsAreHealthy()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using WorkerWebApplicationFactory factory = WorkerWebApplicationFactory.UnitTest();
         using HttpClient client = factory.CreateClient();
 
         Assert.True((await client.GetAsync("/health/live")).IsSuccessStatusCode);
@@ -20,11 +18,8 @@ public class WorkerHealthTests
     public async Task LoginEnabledWorkerRequiresGameDatabaseConfiguration()
     {
         await using TestStaticDataArtifact artifact = await TestStaticDataArtifact.CreateAsync();
-        await using WebApplicationFactory<Program> factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder
-                .UseSetting("Worker:Login:Enabled", "true")
-                .UseSetting("Worker:Login:ArtifactDirectory", artifact.ArtifactDirectory)
-                .UseSetting("Worker:Login:DevelopmentEnrollmentEnabled", "true"));
+        await using WorkerWebApplicationFactory factory =
+            WorkerWebApplicationFactory.IntegrationTest(artifact.ArtifactDirectory);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => factory.CreateClient());

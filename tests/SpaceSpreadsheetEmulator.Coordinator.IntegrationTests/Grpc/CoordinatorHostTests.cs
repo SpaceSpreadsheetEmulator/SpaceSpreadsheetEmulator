@@ -1,6 +1,5 @@
 using Grpc.Net.Client;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Hosting;
 using SpaceSpreadsheetEmulator.Cluster.Contracts.V1;
 using SpaceSpreadsheetEmulator.Cluster.Directory;
 using SpaceSpreadsheetEmulator.Coordinator.IntegrationTests.Support;
@@ -50,17 +49,7 @@ public class CoordinatorHostTests
     [Fact]
     public async Task ConfiguredBootstrapSolarSystemsArePublished()
     {
-        await using var factory = new CoordinatorWebApplicationFactory()
-            .WithWebHostBuilder(builder => builder
-                .UseSetting("Coordinator:BootstrapSolarSystems:Enabled", "true")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:SolarSystemId", "30002780")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:OwnerNodeId", "worker-local")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:Epoch", "11")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:Endpoint", "http://127.0.0.1:5199")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:SolarSystemId", "30000142")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:OwnerNodeId", "worker-local")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:Epoch", "13")
-                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:Endpoint", "http://127.0.0.1:5199"));
+        await using var factory = new CoordinatorWebApplicationFactory();
         using GrpcChannel channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions
         {
             HttpHandler = factory.Server.CreateHandler(),

@@ -44,18 +44,80 @@ internal static class Build3396210PackedRowBuilder
         return new PyTuple(header, packedRows);
     }
 
-    private static PyExtendedObject CreateDescriptor(IReadOnlyList<Build3396210RowField> fields)
+    public static PyExtendedObject CreateIndexedRowset(
+        IReadOnlyList<Build3396210RowField> fields,
+        string columnName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+        PyExtendedObject descriptor = CreateDescriptor(fields);
+        return new PyExtendedObject(
+            2,
+            new PyTuple(
+                new PyTuple(new PyToken("carbon.common.script.sys.crowset.CIndexedRowset")),
+                new PyDictionary(
+                    new PyDictionaryEntry(new PyText("header"), descriptor),
+                    new PyDictionaryEntry(new PyText("columnName"), new PyText(columnName)))));
+    }
+
+    public static PyExtendedObject CreateFilterRowset(
+        IReadOnlyList<Build3396210RowField> fields,
+        string columnName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
+        PyExtendedObject descriptor = CreateDescriptor(fields);
+        return new PyExtendedObject(
+            2,
+            new PyTuple(
+                new PyTuple(new PyToken("carbon.common.script.sys.crowset.CFilterRowset")),
+                new PyDictionary(
+                    new PyDictionaryEntry(new PyText("giveMeSets"), new PyBoolean(false)),
+                    new PyDictionaryEntry(new PyText("header"), descriptor),
+                    new PyDictionaryEntry(
+                        new PyText("allowDuplicateCompoundKeys"),
+                        new PyBoolean(false)),
+                    new PyDictionaryEntry(new PyText("indexName"), PyNull.Instance),
+                    new PyDictionaryEntry(new PyText("columnName"), new PyText(columnName)))));
+    }
+
+    public static PyPackedRow CreateRow(
+        IReadOnlyList<Build3396210RowField> fields,
+        IReadOnlyList<PyValue> values,
+        params (string Name, string Token)[] virtualFields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        ArgumentNullException.ThrowIfNull(values);
+        PyExtendedObject descriptor = CreateDescriptor(fields, virtualFields);
+        return CreatePackedRow(descriptor, CreateColumns(fields), values);
+    }
+
+    public static PyExtendedObject CreateDescriptor(
+        IReadOnlyList<Build3396210RowField> fields,
+        IReadOnlyList<(string Name, string Token)>? virtualFields = null)
     {
         var columns = new PyTuple(fields
             .Select(field => (PyValue)new PyTuple(
                 new PyText(field.Name),
                 new PyInteger(field.Encoding)))
             .ToArray());
+        PyValue[] headerItems = virtualFields is { Count: > 0 }
+            ?
+            [
+                new PyToken("blue.DBRowDescriptor"),
+                new PyTuple(columns),
+                new PyList(virtualFields
+                    .Select(field => (PyValue)new PyTuple(
+                        new PyText(field.Name),
+                        new PyToken(field.Token)))
+                    .ToArray()),
+            ]
+            :
+            [
+                new PyToken("blue.DBRowDescriptor"),
+                new PyTuple(columns),
+            ];
         return new PyExtendedObject(
             1,
-            new PyTuple(
-                new PyToken("blue.DBRowDescriptor"),
-                new PyTuple(columns)));
+            new PyTuple(headerItems));
     }
 
     private static ImmutableArray<PackedRowColumn> CreateColumns(

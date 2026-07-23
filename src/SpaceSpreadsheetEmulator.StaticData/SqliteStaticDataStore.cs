@@ -54,7 +54,7 @@ public sealed class SqliteStaticDataStore : IStaticDataStore
     {
         await using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT kind, id, name, parent_id, secondary_parent_id, type_id, owner_id
+            SELECT kind, id, name, parent_id, secondary_parent_id, type_id, owner_id, operation_id
             FROM records
             WHERE kind = $kind AND id = $id;
             """;
@@ -66,15 +66,78 @@ public sealed class SqliteStaticDataStore : IStaticDataStore
             return null;
         }
 
-        return new StaticDataRecord(
+        return ReadRecord(reader);
+    }
+
+    public async ValueTask<IReadOnlyList<StaticDataRecord>> ListAsync(
+        StaticDataEntityKind kind,
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT kind, id, name, parent_id, secondary_parent_id, type_id, owner_id, operation_id
+            FROM records
+            WHERE kind = $kind
+            ORDER BY id;
+            """;
+        command.Parameters.AddWithValue("$kind", (int)kind);
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        var records = new List<StaticDataRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            records.Add(ReadRecord(reader));
+        }
+
+        return records;
+    }
+
+    public async ValueTask<IReadOnlyList<StaticNpcAgent>> ListNpcAgentsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                agent_id,
+                agent_type_id,
+                division_id,
+                level,
+                station_id,
+                bloodline_id,
+                corporation_id,
+                gender,
+                is_locator_agent
+            FROM npc_agents
+            ORDER BY agent_id;
+            """;
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        var agents = new List<StaticNpcAgent>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            agents.Add(new StaticNpcAgent(
+                reader.GetInt64(0),
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetInt64(4),
+                reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                reader.IsDBNull(6) ? null : reader.GetInt64(6),
+                reader.GetBoolean(7),
+                reader.GetBoolean(8)));
+        }
+
+        return agents;
+    }
+
+    public async ValueTask DisposeAsync() => await connection.DisposeAsync();
+
+    private static StaticDataRecord ReadRecord(SqliteDataReader reader)
+        => new(
             (StaticDataEntityKind)reader.GetInt32(0),
             reader.GetInt64(1),
             reader.GetString(2),
             reader.IsDBNull(3) ? null : reader.GetInt64(3),
             reader.IsDBNull(4) ? null : reader.GetInt64(4),
             reader.IsDBNull(5) ? null : reader.GetInt64(5),
-            reader.IsDBNull(6) ? null : reader.GetInt64(6));
-    }
-
-    public async ValueTask DisposeAsync() => await connection.DisposeAsync();
+            reader.IsDBNull(6) ? null : reader.GetInt64(6),
+            reader.IsDBNull(7) ? null : reader.GetInt64(7));
 }

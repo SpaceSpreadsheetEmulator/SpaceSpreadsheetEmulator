@@ -4,10 +4,13 @@ namespace SpaceSpreadsheetEmulator.Protocol.Tests.Support;
 
 internal static class LocalCaptureCorpus
 {
-    public const string EnvironmentVariable = "SSE_LOCAL_PROTOCOL_CAPTURE_DIRECTORY";
+    private static readonly string? ExplicitRoot = LoadExplicitRoot();
 
-    public static string ConfiguredRoot => Environment.GetEnvironmentVariable(EnvironmentVariable)
-        ?? Path.Combine(FindRepositoryRoot(), "_local", "protocol-captures");
+    public static bool HasExplicitRoot => !string.IsNullOrWhiteSpace(ExplicitRoot);
+
+    public static string ConfiguredRoot => HasExplicitRoot
+        ? Path.GetFullPath(ExplicitRoot!, FindRepositoryRoot())
+        : Path.Combine(FindRepositoryRoot(), "_local", "protocol-captures");
 
     public static bool HasFrameExports()
         => Directory.Exists(ConfiguredRoot)
@@ -107,6 +110,21 @@ internal static class LocalCaptureCorpus
 
         return directory?.FullName ?? Directory.GetCurrentDirectory();
     }
+
+    private static string? LoadExplicitRoot()
+    {
+        string localSettings = Path.Combine(
+            AppContext.BaseDirectory,
+            "appsettings.UnitTest.local.json");
+        string settingsPath = File.Exists(localSettings)
+            ? localSettings
+            : Path.Combine(AppContext.BaseDirectory, "appsettings.UnitTest.json");
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+        return document.RootElement
+            .GetProperty("ProtocolTests")
+            .GetProperty("LocalCaptureDirectory")
+            .GetString();
+    }
 }
 
 internal sealed record LocalMarshalFrame(
@@ -125,7 +143,22 @@ public sealed class LocalCaptureFactAttribute : FactAttribute
     {
         if (!LocalCaptureCorpus.HasFrameExports())
         {
-            Skip = $"No local frames*.jsonl corpus is configured; set {LocalCaptureCorpus.EnvironmentVariable}.";
+            Skip = "No local frames*.jsonl corpus is configured.";
+        }
+    }
+}
+
+public sealed class ExplicitLocalCaptureFactAttribute : FactAttribute
+{
+    public ExplicitLocalCaptureFactAttribute()
+    {
+        if (!LocalCaptureCorpus.HasExplicitRoot)
+        {
+            Skip = "Set ProtocolTests:LocalCaptureDirectory in appsettings.UnitTest.local.json.";
+        }
+        else if (!LocalCaptureCorpus.HasFrameExports())
+        {
+            Skip = "The configured local capture directory contains no frames*.jsonl exports.";
         }
     }
 }

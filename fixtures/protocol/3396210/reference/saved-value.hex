@@ -1,2 +1,3 @@
-# one declared save slot; compact tuple2(save text("x"), saved reference 1)
-7e 01 00 00 00 2c 6e 01 78 1b 01
+# one declared save slot; compact tuple2(save text("x"), saved reference 1);
+# the tail maps the save occurrence to one-based slot 1
+7e 01 00 00 00 2c 6e 01 78 1b 01 01 00 00 00

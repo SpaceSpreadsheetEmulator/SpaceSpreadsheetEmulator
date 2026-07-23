@@ -1,7 +1,5 @@
 using Google.Protobuf;
 using Grpc.Net.Client;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Worker.IntegrationTests.Support;
 
@@ -18,22 +16,10 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
     public async Task EnrolledAccountReceivesValidatedStarterCharacter()
     {
         await using TestStaticDataArtifact artifact = await TestStaticDataArtifact.CreateAsync();
-        await using WebApplicationFactory<Program> factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder
-                .UseSetting("Worker:Login:Enabled", "true")
-                .UseSetting("Worker:Login:ArtifactDirectory", artifact.ArtifactDirectory)
-                .UseSetting("Worker:Login:DevelopmentEnrollmentEnabled", "true")
-                .UseSetting("ConnectionStrings:GameDatabase", database.ConnectionString)
-                .UseSetting("Worker:SolarSystem:Enabled", "true")
-                .UseSetting("Worker:SolarSystem:NodeId", "worker-test")
-                .UseSetting("Worker:SolarSystem:Assignments:0:SolarSystemId", "30002780")
-                .UseSetting("Worker:SolarSystem:Assignments:0:Epoch", "7")
-                .UseSetting("Worker:SolarSystem:Assignments:0:EntryPoints:0:StationId", "60000004")
-                .UseSetting("Worker:SolarSystem:Assignments:0:EntryPoints:0:X", "100")
-                .UseSetting("Worker:SolarSystem:Assignments:0:EntryPoints:0:Y", "-50")
-                .UseSetting("Worker:SolarSystem:Assignments:0:EntryPoints:0:Z", "25")
-                .UseSetting("Worker:SolarSystem:Assignments:1:SolarSystemId", "30000142")
-                .UseSetting("Worker:SolarSystem:Assignments:1:Epoch", "9"));
+        await using WorkerWebApplicationFactory factory =
+            WorkerWebApplicationFactory.IntegrationTest(
+                artifact.ArtifactDirectory,
+                database.ConnectionString);
         using var channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions
         {
             HttpHandler = factory.Server.CreateHandler(),
@@ -56,14 +42,51 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
             Context = context,
             LoginTicket = login.LoginTicket,
         });
+        StationCatalogResponse stations = await client.GetStationCatalogAsync(new StationCatalogRequest
+        {
+            Context = context,
+            LoginTicket = login.LoginTicket,
+        });
+        NpcAgentCatalogResponse agents = await client.GetNpcAgentCatalogAsync(
+            new NpcAgentCatalogRequest
+            {
+                Context = context,
+                LoginTicket = login.LoginTicket,
+            });
 
         Assert.Equal(3_396_210u, compatibility.SdeBuild);
         Assert.True(login.Success, login.Error?.Message);
         Assert.Single(selection.Characters);
         Assert.Equal("Spreadsheet Pilot", selection.Characters[0].Name);
+        Assert.Equal(1, selection.Characters[0].CharacterGroupId);
+        Assert.Equal(1, selection.Characters[0].CharacterCategoryId);
         Assert.Equal("New Caldari", selection.Characters[0].SolarSystemName);
+        Assert.Equal(60_000_004, selection.Characters[0].HeadquartersStationId);
+        Assert.Equal(1_000_002, selection.Characters[0].StationOwnerId);
+        Assert.Equal(26, selection.Characters[0].StationOperationId);
+        Assert.Equal(1531, selection.Characters[0].StationTypeId);
+        Assert.Equal(15, selection.Characters[0].StationGroupId);
+        Assert.Equal(3, selection.Characters[0].StationCategoryId);
         Assert.Equal("Cell Reference", selection.Characters[0].ShipName);
         Assert.True(selection.Characters[0].ShipId > 0);
+        Assert.Equal(25, selection.Characters[0].ShipGroupId);
+        Assert.Equal(6, selection.Characters[0].ShipCategoryId);
+        StationSummary station = Assert.Single(stations.Stations);
+        Assert.Equal(60_000_004, station.StationId);
+        Assert.Equal(30_002_780, station.SolarSystemId);
+        Assert.Equal(26, station.OperationId);
+        Assert.Equal(1531, station.StationTypeId);
+        Assert.Equal(1_000_002, station.OwnerId);
+        NpcAgentSummary agent = Assert.Single(agents.Agents);
+        Assert.Equal(3_008_416, agent.AgentId);
+        Assert.Equal(2, agent.AgentTypeId);
+        Assert.Equal(22, agent.DivisionId);
+        Assert.Equal(1, agent.Level);
+        Assert.Equal(60_000_004, agent.StationId);
+        Assert.Equal(1, agent.BloodlineId);
+        Assert.Equal(1_000_002, agent.CorporationId);
+        Assert.False(agent.Gender);
+        Assert.False(agent.IsLocatorAgent);
 
         CharacterSummary character = selection.Characters[0];
         var mutation = new SolarSystemMutationRequest

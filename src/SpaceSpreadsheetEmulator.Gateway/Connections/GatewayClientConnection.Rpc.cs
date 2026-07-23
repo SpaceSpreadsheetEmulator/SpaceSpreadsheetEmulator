@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Numerics;
 using System.Text;
 using System.Threading.Channels;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
@@ -32,6 +33,19 @@ internal sealed partial class GatewayClientConnection
             return null;
         }
 
+        if (packet.Value.NumericType == 12)
+        {
+            DecodeResult<MachoClientNotification> notification =
+                MachoNotificationCodec.DecodeClientNotification(packet.Value, profile);
+            if (!notification.IsSuccess)
+            {
+                return notification.Error;
+            }
+
+            LogClientNotification(logger, notification.Value!.Method);
+            return null;
+        }
+
         DecodeResult<MachoRpcRequest> request = MachoRpcCodec.DecodeRequest(packet.Value, profile);
         if (!request.IsSuccess)
         {
@@ -47,10 +61,19 @@ internal sealed partial class GatewayClientConnection
             loginSession.AccountId,
             dispatch.Result,
             profile);
-        await WritePacketAsync(response, outbound, cancellationToken);
-        if (dispatch.Notification is not null)
+        foreach (MachoPacket beforeResponse in dispatch.BeforeResponse)
         {
-            await WritePacketAsync(dispatch.Notification, outbound, cancellationToken);
+            await WritePacketAsync(beforeResponse, outbound, cancellationToken);
+        }
+
+        await WritePacketAsync(
+            response,
+            outbound,
+            cancellationToken,
+            compress: dispatch.CompressResponse);
+        foreach (MachoPacket afterResponse in dispatch.AfterResponse)
+        {
+            await WritePacketAsync(afterResponse, outbound, cancellationToken);
         }
 
         return null;
@@ -59,10 +82,19 @@ internal sealed partial class GatewayClientConnection
     private async Task WritePacketAsync(
         MachoPacket packet,
         ChannelWriter<OutboundFrame> outbound,
-        CancellationToken cancellationToken)
-        => await outbound.WriteAsync(
-            new OutboundFrame(MachoPacketCodec.Encode(packet, profile), Encrypt: cipher is not null),
+        CancellationToken cancellationToken,
+        bool compress = false)
+    {
+        byte[] payload = MachoPacketCodec.Encode(packet, profile);
+        if (compress)
+        {
+            payload = compression.Compress(payload);
+        }
+
+        await outbound.WriteAsync(
+            new OutboundFrame(payload, Encrypt: cipher is not null),
             cancellationToken);
+    }
 
     private MachoPacket CreatePingResponse(MachoPacket request)
     {
@@ -116,6 +148,7 @@ internal sealed partial class GatewayClientConnection
         RpcDispatchResult? dynamicResponse = route switch
         {
             "machoNet.GetTime" => Result(new PyInteger(timeProvider.GetUtcNow().UtcDateTime.ToFileTimeUtc())),
+            "objectCaching.GetCachableObject" => GetCachableObject(request),
             "charUnboundMgr.GetCharacterSelectionData" => Result(await CreateCharacterSelectionAsync(cancellationToken)),
             "config.GetMultiOwnersEx" => Result(Build3396210OwnerMapper.CreateOwners(
                 characterSelection,
@@ -124,7 +157,30 @@ internal sealed partial class GatewayClientConnection
                 characterSelection,
                 ReadRequestedIds(request.Arguments))),
             "charUnboundMgr.SelectCharacterID" => SelectCharacter(request),
-            "ship.MachoBindObject" => await UndockAsync(request, cancellationToken),
+            "stationSvc.GetStationItemBits" => GetStationItemBits(request),
+            "map.GetStationInfo" => await GetStationInfoAsync(request, cancellationToken),
+            "dogmaIM.MachoResolveObject" => ResolveDogmaLocation(request),
+            "dogmaIM.MachoBindObject" => BindDogmaLocation(request),
+            "invbroker.MachoResolveObject" => ResolveInventoryBroker(request),
+            "invbroker.MachoBindObject" => BindInventoryBroker(request),
+            "crimewatch.MachoResolveObject" => ResolveCrimewatchLocation(request),
+            "crimewatch.MachoBindObject" => BindCrimewatchLocation(request),
+            "corpRegistry.MachoResolveObject" => ResolveCorporationRegistry(request),
+            "corpRegistry.MachoBindObject" => BindCorporationRegistry(request),
+            "standingMgr.GetNPCNPCStandings" => GetNpcNpcStandings(request),
+            "standingMgr.GetCharStandings" => GetCharacterStandings(request),
+            "skillMgr2.GetMySkillHandler" => GetSkillHandler(request),
+            "skillMgr2.MachoBindObject" => BindSkillHandler(request),
+            "agentMgr.GetAgents" => await GetAgentsAsync(request, cancellationToken),
+            "ship.MachoResolveObject" => ResolveShipAccess(request),
+            "ship.MachoBindObject" => await BindShipAccessAsync(request, cancellationToken),
+            "bound.GetInventoryFromId" => GetInventoryFromId(request),
+            "bound.GetSelfInvItem" => GetSelfInventoryItem(request),
+            "bound.List" => ListInventory(request),
+            "bound.GetAvailableTurretSlots" => GetAvailableTurretSlots(request),
+            "bound.GetBoosters" => GetSkillBoosters(request),
+            "bound.GetAggressionSettings" => GetCorporationAggressionSettings(request),
+            "bound.GetEveOwners" => GetCorporationMembers(request),
             "beyonce.MachoBindObject" => await BindSolarSystemAsync(request, cancellationToken),
             "bound.CmdDock" => await DockAsync(request, cancellationToken),
             _ => null,
@@ -132,6 +188,12 @@ internal sealed partial class GatewayClientConnection
         if (dynamicResponse is not null)
         {
             return dynamicResponse;
+        }
+
+        RpcDispatchResult? stationBootstrap = GetStationBootstrapResponse(route, request);
+        if (stationBootstrap is not null)
+        {
+            return stationBootstrap;
         }
 
         StartupResponse? startupResponse = Build3396210StartupProfile.CreateResponse(
@@ -143,11 +205,27 @@ internal sealed partial class GatewayClientConnection
             : Result(startupResponse.Value);
     }
 
+    private static RpcDispatchResult GetNpcNpcStandings(MachoRpcRequest request)
+        => request.Arguments.Items.Length == 0
+            ? Result(Build3396210StandingMapper.CreateEmptyNpcStandings())
+            : Result(PyNull.Instance);
+
+    private static RpcDispatchResult GetCharacterStandings(MachoRpcRequest request)
+        => request.Arguments.Items.Length == 0
+            ? Result(Build3396210StandingMapper.CreateEmptyCharacterStandings())
+            : Result(PyNull.Instance);
+
     private RpcDispatchResult Unsupported(MachoRpcRequest request, string route)
     {
         LogUnsupportedRpc(logger, request.CallId, route);
         return Result(PyNull.Instance);
     }
+
+    [LoggerMessage(
+        EventId = 113,
+        Level = LogLevel.Information,
+        Message = "Received client notification {Method}")]
+    private static partial void LogClientNotification(ILogger logger, string method);
 
     private RpcDispatchResult SelectCharacter(MachoRpcRequest request)
     {
@@ -160,13 +238,68 @@ internal sealed partial class GatewayClientConnection
 
         selectedCharacter = characterSelection.Characters.SingleOrDefault(
             character => character.CharacterId == characterId);
+        inventoryBrokerBinding = null;
+        inventoryBindings.Clear();
+        characterManagerBinding = null;
+        methodCache.Clear();
+        crimewatchBinding = null;
+        corporationRegistryBinding = null;
+        skillHandlerBinding = null;
+        shipAccessBinding = null;
+        warRegistryBinding = null;
         return selectedCharacter is null
             ? Result(PyNull.Instance)
             : Result(
                 PyNull.Instance,
-                CreateSessionNotification(
-                    previousStationId: null,
-                    selectedCharacter.HasStationId ? selectedCharacter.StationId : null));
+                beforeResponse:
+                [
+                    Build3396210SessionMapper.CreateCharacterSelection(
+                        gatewaySessionId,
+                        ProxyNodeId,
+                        checked(1_000_000L + loginSession!.AccountId),
+                        loginSession.AccountId,
+                        selectedCharacter,
+                        request.Packet.Extensions),
+                ]);
+    }
+
+    private RpcDispatchResult GetStationItemBits(MachoRpcRequest request)
+    {
+        if (request.Arguments.Items.Length != 0
+            || selectedCharacter is not { HasStationId: true } character
+            || character.StationOwnerId <= 0
+            || character.StationOperationId <= 0
+            || character.StationTypeId <= 0)
+        {
+            return Result(PyNull.Instance);
+        }
+
+        return Result(new PyTuple(
+            new PyInteger(character.StationOwnerId),
+            new PyInteger(character.StationId),
+            new PyInteger(character.StationOperationId),
+            new PyInteger(character.StationTypeId)));
+    }
+
+    private async Task<RpcDispatchResult> GetStationInfoAsync(
+        MachoRpcRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Arguments.Items.Length != 0)
+        {
+            return Result(PyNull.Instance);
+        }
+
+        StationCatalogResponse? catalog = await loginBackend.GetStationCatalogAsync(
+            gatewaySessionId,
+            loginSession!.LoginTicket,
+            cancellationToken);
+        PyValue? stationInfo = catalog is null
+            ? null
+            : Build3396210StationMapper.CreateStationInfo(catalog.Stations);
+        return stationInfo is null
+            ? Result(PyNull.Instance)
+            : CacheMethodResult("map", "GetStationInfo", stationInfo);
     }
 
     private async Task<RpcDispatchResult> UndockAsync(
@@ -207,7 +340,10 @@ internal sealed partial class GatewayClientConnection
         solarSystemBinding = $"N=solarsystem:{transition.SolarSystemId}:{transition.Epoch}";
         return Result(
             new PyText($"N=ship:{transition.ShipId}:{transition.Epoch}"),
-            CreateSessionNotification(previousStationId, stationId: null));
+            afterResponse:
+            [
+                CreateSessionNotification(previousStationId, stationId: null),
+            ]);
     }
 
     private async Task<RpcDispatchResult> BindSolarSystemAsync(
@@ -279,7 +415,10 @@ internal sealed partial class GatewayClientConnection
         solarSystemBinding = null;
         return Result(
             PyNull.Instance,
-            CreateSessionNotification(previousStationId: null, transition.StationId));
+            afterResponse:
+            [
+                CreateSessionNotification(previousStationId: null, transition.StationId),
+            ]);
     }
 
     private void ApplyTransition(SolarSystemTransition transition)
@@ -419,6 +558,14 @@ internal sealed partial class GatewayClientConnection
             return true;
         }
 
+        if (value is PyBigInteger bigInteger
+            && bigInteger.Value >= long.MinValue
+            && bigInteger.Value <= long.MaxValue)
+        {
+            result = (long)bigInteger.Value;
+            return true;
+        }
+
         result = 0;
         return false;
     }
@@ -490,8 +637,20 @@ internal sealed partial class GatewayClientConnection
             PyNull.Instance,
         ];
 
-    private static RpcDispatchResult Result(PyValue result, MachoPacket? notification = null)
-        => new(result, notification);
+    private static RpcDispatchResult Result(
+        PyValue result,
+        ImmutableArray<MachoPacket> beforeResponse = default,
+        ImmutableArray<MachoPacket> afterResponse = default,
+        bool compressResponse = false)
+        => new(
+            result,
+            beforeResponse.IsDefault ? [] : beforeResponse,
+            afterResponse.IsDefault ? [] : afterResponse,
+            compressResponse);
 
-    private sealed record RpcDispatchResult(PyValue Result, MachoPacket? Notification);
+    private sealed record RpcDispatchResult(
+        PyValue Result,
+        ImmutableArray<MachoPacket> BeforeResponse,
+        ImmutableArray<MachoPacket> AfterResponse,
+        bool CompressResponse);
 }

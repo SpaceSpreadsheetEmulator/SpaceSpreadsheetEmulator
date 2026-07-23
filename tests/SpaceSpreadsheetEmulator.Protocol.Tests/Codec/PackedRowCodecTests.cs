@@ -41,7 +41,8 @@ public class PackedRowCodecTests
             "7E010000002C" +
             "622C0214626C75652E4442526F7744657363726970746F72" +
             "252C2C1302696406032C13046E616D650582002D2D" +
-            "2A1B0105002A0000002E03626F62");
+            "2A1B0105002A0000002E03626F62" +
+            "01000000");
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
 
         DecodeResult<PyValue> decoded = BlueMarshalCodec.Decode(new(fixture), profile);
@@ -55,5 +56,32 @@ public class PackedRowCodecTests
             column => Assert.Equal(new PackedRowColumn("id", 3), column),
             column => Assert.Equal(new PackedRowColumn("name", 130), column));
         Assert.Equal(fixture, BlueMarshalCodec.Encode(decoded.Value!, profile, EncodingMode.PreserveWireForm));
+    }
+
+    [Fact]
+    public void PackedRowDescriptorMayDeclareVirtualColumns()
+    {
+        var header = new PyExtendedObject(
+            1,
+            new PyTuple(
+                new PyToken("blue.DBRowDescriptor"),
+                new PyTuple(new PyTuple(
+                    new PyTuple(new PyText("itemID"), new PyInteger(20)))),
+                new PyList(new PyTuple(
+                    new PyText("singleton"),
+                    new PyToken("eve.common.script.sys.eveCfg.Singleton")))));
+        var row = new PyPackedRow(
+            header,
+            ImmutableArray.Create(new PackedRowColumn("itemID", 20)),
+            ImmutableArray.Create<byte>(0, 1, 0, 0, 0, 0, 0, 0, 0, 0),
+            ImmutableArray<PyValue>.Empty);
+        ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
+
+        DecodeResult<PyValue> decoded = BlueMarshalCodec.Decode(
+            new(BlueMarshalCodec.Encode(row, profile)),
+            profile);
+
+        Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
+        Assert.True(PyValueComparers.Semantic.Equals(row, decoded.Value));
     }
 }

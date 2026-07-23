@@ -7,6 +7,10 @@ using SpaceSpreadsheetEmulator.Gateway.Connections;
 using SpaceSpreadsheetEmulator.Gateway.LocalEdge;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile(
+    $"appsettings.{builder.Environment.EnvironmentName}.local.json",
+    optional: true,
+    reloadOnChange: builder.Environment.IsDevelopment());
 
 builder.Services.AddHealthChecks();
 builder.Services.AddOptions<LocalClientEdgeOptions>()

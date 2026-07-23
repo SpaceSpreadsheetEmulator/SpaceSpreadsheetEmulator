@@ -1,8 +1,10 @@
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text.Json;
+using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 using SpaceSpreadsheetEmulator.Protocol;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
@@ -85,6 +87,483 @@ public class ConnectionIoTests
         DecodeResult<PyValue> decoded = BlueMarshalCodec.Decode(new ReadOnlySequence<byte>(result.Data.AsMemory()), profile);
         Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
         Assert.IsType<PyInteger>(decoded.Value);
+    }
+
+    [Fact]
+    public async Task LargeAgentCatalogIsCompressedAndRoundTripsThroughTheGateway()
+    {
+        await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
+        gateway.LoginBackend.NpcAgentCatalogFactory = () =>
+        {
+            var catalog = new NpcAgentCatalogResponse();
+            for (int index = 0; index < 10_966; index++)
+            {
+                catalog.Agents.Add(new NpcAgentSummary
+                {
+                    AgentId = 3_000_000 + index,
+                    AgentTypeId = 2,
+                    DivisionId = 18,
+                    Level = 1,
+                    StationId = 60_000_004,
+                    BloodlineId = 4,
+                    CorporationId = 1_000_002,
+                });
+            }
+
+            return catalog;
+        };
+        using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
+        await client.CompleteHandshakeAsync();
+
+        PyObject agents = Assert.IsType<PyObject>(await client.CallCachedMethodAsync(
+            "agentMgr",
+            "GetAgents",
+            new PyTuple()));
+
+        PyDictionary state = Assert.IsType<PyDictionary>(agents.State);
+        Assert.Equal(
+            10_966,
+            Assert.IsType<PyList>(Value(state, "lines")).Items.Length);
+    }
+
+    [Fact]
+    public async Task SelectedCharacterReceivesStaticBackedStationItemBits()
+    {
+        await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
+        using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
+        await client.CompleteHandshakeAsync();
+
+        PyList selection = Assert.IsType<PyList>(await client.CallAsync(
+            "charUnboundMgr",
+            "GetCharacterSelectionData",
+            new PyTuple()));
+        IReadOnlyDictionary<string, PyValue> character = AssertCharacterSelectionShape(selection);
+        long selectCallId = await client.WriteCallAsync(
+            "charUnboundMgr",
+            "SelectCharacterID",
+            new PyTuple(
+                new PyInteger(Integer(character, "characterID")),
+                PyNull.Instance,
+                new PyBoolean(false)));
+        Assert.Equal(16, (await client.ReadPacketAsync()).NumericType);
+        Assert.IsType<PyNull>(await client.ReadCallResponseAsync(selectCallId));
+
+        var inventoryObject = new PyTuple(new PyInteger(60_000_004), new PyInteger(15));
+        PyObject skillHandler = Assert.IsType<PyObject>(await client.CallAsync(
+            "skillMgr2",
+            "GetMySkillHandler",
+            new PyTuple()));
+        Assert.Equal("carbon.common.script.net.moniker.Moniker", Text(skillHandler.Type));
+        PyTuple skillHandlerState = Assert.IsType<PyTuple>(skillHandler.State);
+        Assert.Collection(
+            skillHandlerState.Items,
+            value => Assert.Equal("skillMgr2", Text(value)),
+            value => Assert.Equal(1, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.Equal(90_000_007, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.IsType<PyNull>(value));
+
+        PyTuple skillHandlerBinding = Assert.IsType<PyTuple>(await client.CallAsync(
+            "skillMgr2",
+            "MachoBindObject",
+            new PyTuple(
+                new PyInteger(90_000_007),
+                new PyTuple(
+                    new PyBuffer("GetBoosters"u8),
+                    new PyTuple(),
+                    new PyDictionary()))));
+        Assert.Equal(2, skillHandlerBinding.Items.Length);
+        string skillLease = LeaseBinding(skillHandlerBinding.Items[0]);
+        Assert.Empty(Assert.IsType<PyDictionary>(skillHandlerBinding.Items[1]).Entries);
+        Assert.Empty(Assert.IsType<PyDictionary>(await client.CallAsync(
+            service: null,
+            "GetBoosters",
+            new PyTuple(),
+            skillLease)).Entries);
+
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "ship",
+            "MachoResolveObject",
+            new PyTuple(inventoryObject))).Value);
+        PyTuple shipAccessBinding = Assert.IsType<PyTuple>(await client.CallAsync(
+            "ship",
+            "MachoBindObject",
+            new PyTuple(
+                inventoryObject,
+                new PyTuple(
+                    new PyBuffer("GetDirtTimestamp"u8),
+                    new PyTuple(new PyBigInteger(new BigInteger(190_000_007))),
+                    new PyDictionary()))));
+        Assert.Equal(2, shipAccessBinding.Items.Length);
+        Assert.StartsWith("N=1:", LeaseBinding(shipAccessBinding.Items[0]), StringComparison.Ordinal);
+        Assert.True(Assert.IsType<PyBigInteger>(shipAccessBinding.Items[1]).Value > 0);
+
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "dogmaIM",
+            "MachoResolveObject",
+            new PyTuple(inventoryObject))).Value);
+        PyTuple dogmaBinding = Assert.IsType<PyTuple>(await client.CallAsync(
+            "dogmaIM",
+            "MachoBindObject",
+            new PyTuple(
+                inventoryObject,
+                new PyTuple(
+                    new PyBuffer("GetAllInfo"u8),
+                    new PyTuple(new PyBoolean(true), new PyBoolean(true), PyNull.Instance),
+                    new PyDictionary()))));
+        Assert.Equal(2, dogmaBinding.Items.Length);
+        Assert.StartsWith("N=1:", LeaseBinding(dogmaBinding.Items[0]), StringComparison.Ordinal);
+        PyObject allInfo = Assert.IsType<PyObject>(dogmaBinding.Items[1]);
+        Assert.Equal("utillib.KeyVal", Text(allInfo.Type));
+        PyDictionary dogmaState = Assert.IsType<PyDictionary>(allInfo.State);
+        Assert.Equal(190_000_007, Assert.IsType<PyInteger>(Value(dogmaState, "activeShipID")).Value);
+        Assert.Single(Assert.IsType<PyDictionary>(Value(dogmaState, "shipInfo")).Entries);
+        Assert.Equal(2, Assert.IsType<PyTuple>(Value(dogmaState, "charInfo")).Items.Length);
+        Assert.Equal(4, Assert.IsType<PyTuple>(Value(dogmaState, "shipState")).Items.Length);
+
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "crimewatch",
+            "MachoResolveObject",
+            new PyTuple(inventoryObject))).Value);
+        PyTuple crimewatchBinding = Assert.IsType<PyTuple>(await client.CallAsync(
+            "crimewatch",
+            "MachoBindObject",
+            new PyTuple(
+                inventoryObject,
+                new PyTuple(
+                    new PyBuffer("GetClientStates"u8),
+                    new PyTuple(),
+                    new PyDictionary()))));
+        Assert.Equal(2, crimewatchBinding.Items.Length);
+        Assert.StartsWith("N=1:", LeaseBinding(crimewatchBinding.Items[0]), StringComparison.Ordinal);
+        PyTuple crimewatchState = Assert.IsType<PyTuple>(crimewatchBinding.Items[1]);
+        Assert.Equal(
+            [100L, 200L, 400L, 300L, 500L],
+            Assert.IsType<PyTuple>(crimewatchState.Items[0]).Items
+                .Select(timer => Assert.IsType<PyInteger>(Assert.IsType<PyTuple>(timer).Items[0]).Value)
+                .ToArray());
+        Assert.Empty(Assert.IsType<PyDictionary>(crimewatchState.Items[1]).Entries);
+        Assert.Equal(2, Assert.IsType<PyTuple>(crimewatchState.Items[2]).Items.Length);
+        Assert.Equal(1, Assert.IsType<PyInteger>(crimewatchState.Items[3]).Value);
+
+        var corporationObject = new PyTuple(new PyInteger(1_000_002));
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "corpRegistry",
+            "MachoResolveObject",
+            corporationObject)).Value);
+        PyTuple corporationBinding = Assert.IsType<PyTuple>(await client.CallAsync(
+            "corpRegistry",
+            "MachoBindObject",
+            new PyTuple(new PyInteger(1_000_002), PyNull.Instance)));
+        Assert.Equal(2, corporationBinding.Items.Length);
+        string corporationLease = LeaseBinding(corporationBinding.Items[0]);
+        Assert.IsType<PyNull>(corporationBinding.Items[1]);
+        PyObject aggressionSettings = Assert.IsType<PyObject>(await client.CallAsync(
+            service: null,
+            "GetAggressionSettings",
+            new PyTuple(),
+            corporationLease,
+            new PyDictionary(new PyDictionaryEntry(
+                new PyText("machoVersion"),
+                new PyInteger(1)))));
+        Assert.Equal(
+            "crimewatch.corp_aggression.settings.AggressionSettings",
+            Text(aggressionSettings.Type));
+        PyDictionary aggressionState = Assert.IsType<PyDictionary>(aggressionSettings.State);
+        Assert.IsType<PyNull>(Value(aggressionState, "_enableAfter"));
+        Assert.Equal(0, Assert.IsType<PyInteger>(Value(aggressionState, "_disableAfter")).Value);
+
+        PyExtendedObject npcStandings = AssertRowset(
+            await client.CallAsync(
+                "standingMgr",
+                "GetNPCNPCStandings",
+                new PyTuple(),
+                keywordArguments: new PyDictionary(new PyDictionaryEntry(
+                    new PyText("machoVersion"),
+                    new PyInteger(1)))),
+            "fromID",
+            "toID",
+            "standing");
+        Assert.Empty(npcStandings.ListItems);
+
+        PyExtendedObject characterStandings = AssertRowset(
+            await client.CallAsync(
+                "standingMgr",
+                "GetCharStandings",
+                new PyTuple(),
+                keywordArguments: new PyDictionary(new PyDictionaryEntry(
+                    new PyText("machoVersion"),
+                    new PyInteger(1)))),
+            "fromID",
+            "standing");
+        Assert.Empty(characterStandings.ListItems);
+
+        PyExtendedObject corporationMembers = AssertRowset(
+            await client.CallAsync(
+                service: null,
+                "GetEveOwners",
+                new PyTuple(),
+                corporationLease),
+            "ownerID",
+            "ownerName",
+            "typeID",
+            "gender");
+        IReadOnlyDictionary<string, PyValue> corporationMember = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(Assert.Single(corporationMembers.ListItems)));
+        Assert.Equal(90_000_007, Integer(corporationMember, "ownerID"));
+        Assert.Equal("Spreadsheet Pilot", Text(corporationMember["ownerName"]));
+        Assert.Equal(1373, Integer(corporationMember, "typeID"));
+        Assert.False(Assert.IsType<PyBoolean>(corporationMember["gender"]).Value);
+
+        PyObject agents = Assert.IsType<PyObject>(await client.CallCachedMethodAsync(
+            "agentMgr",
+            "GetAgents",
+            new PyTuple()));
+        Assert.Equal("eve.common.script.sys.rowset.Rowset", Text(agents.Type));
+        PyDictionary agentState = Assert.IsType<PyDictionary>(agents.State);
+        Assert.Equal(
+            [
+                "agentID",
+                "agentTypeID",
+                "divisionID",
+                "level",
+                "stationID",
+                "bloodlineID",
+                "corporationID",
+                "gender",
+                "isLocatorAgent",
+            ],
+            Assert.IsType<PyList>(Value(agentState, "header"))
+                .Items.Select(Text).ToArray());
+        Assert.Equal(
+            "carbon.common.script.sys.row.Row",
+            Text(Value(agentState, "RowClass")));
+        PyList agent = Assert.IsType<PyList>(
+            Assert.Single(Assert.IsType<PyList>(Value(agentState, "lines")).Items));
+        Assert.Equal(3_008_416, Assert.IsType<PyInteger>(agent.Items[0]).Value);
+        Assert.Equal(60_000_004, Assert.IsType<PyInteger>(agent.Items[4]).Value);
+
+        PyExtendedObject stationInfo = Assert.IsType<PyExtendedObject>(await client.CallCachedMethodAsync(
+            "map",
+            "GetStationInfo",
+            new PyTuple()));
+        IReadOnlyDictionary<string, PyValue> stationRow = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(Assert.Single(stationInfo.ListItems)));
+        Assert.Equal(60_000_004, Integer(stationRow, "stationID"));
+        Assert.Equal(30_002_780, Integer(stationRow, "solarSystemID"));
+        Assert.Equal(26, Integer(stationRow, "operationID"));
+        Assert.Equal(1531, Integer(stationRow, "stationTypeID"));
+        Assert.Equal(1_000_002, Integer(stationRow, "ownerID"));
+
+        PyTuple station = Assert.IsType<PyTuple>(await client.CallAsync(
+            "stationSvc",
+            "GetStationItemBits",
+            new PyTuple()));
+
+        Assert.Collection(
+            station.Items,
+            value => Assert.Equal(1_000_002, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.Equal(60_000_004, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.Equal(26, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.Equal(1531, Assert.IsType<PyInteger>(value).Value));
+
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "invbroker",
+            "MachoResolveObject",
+            new PyTuple(inventoryObject))).Value);
+        PyTuple stationInventoryLeases = Assert.IsType<PyTuple>(await client.CallAsync(
+            "invbroker",
+            "MachoBindObject",
+            new PyTuple(
+                inventoryObject,
+                new PyTuple(
+                    new PyBuffer("GetInventory"u8),
+                    new PyTuple(new PyInteger(10_004), PyNull.Instance),
+                    new PyDictionary()))));
+        Assert.Equal(2, stationInventoryLeases.Items.Length);
+        string stationInventoryBinding = LeaseBinding(stationInventoryLeases.Items[1]);
+        PyExtendedObject stationItems = Assert.IsType<PyExtendedObject>(await client.CallAsync(
+            service: null,
+            "List",
+            new PyTuple(),
+            stationInventoryBinding,
+            new PyDictionary(new PyDictionaryEntry(
+                new PyText("flag"),
+                new PyInteger(4)))));
+        Assert.Equal(1, stationItems.Variant);
+        PyTuple stationItemsHeader = Assert.IsType<PyTuple>(stationItems.Header);
+        Assert.Equal("__builtin__.set", Text(stationItemsHeader.Items[0]));
+        PyPackedRow dockedShip = Assert.IsType<PyPackedRow>(Assert.Single(
+            Assert.IsType<PyList>(
+                Assert.IsType<PyTuple>(stationItemsHeader.Items[1]).Items[0]).Items));
+        IReadOnlyDictionary<string, PyValue> dockedShipRow = PackedRowTestReader.Read(dockedShip);
+        Assert.Equal(190_000_007, Integer(dockedShipRow, "itemID"));
+        Assert.Equal(601, Integer(dockedShipRow, "typeID"));
+        Assert.Equal(90_000_007, Integer(dockedShipRow, "ownerID"));
+        Assert.Equal(60_000_004, Integer(dockedShipRow, "locationID"));
+        Assert.Equal(4, Integer(dockedShipRow, "flagID"));
+        Assert.Equal(-1, Integer(dockedShipRow, "quantity"));
+        Assert.Equal(25, Integer(dockedShipRow, "groupID"));
+        Assert.Equal(6, Integer(dockedShipRow, "categoryID"));
+        IReadOnlyDictionary<string, PyValue> stationInventoryRow = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(await client.CallAsync(
+                service: null,
+                "GetSelfInvItem",
+                new PyTuple(),
+                stationInventoryBinding)));
+        Assert.Equal(60_000_004, Integer(stationInventoryRow, "itemID"));
+        Assert.Equal(1531, Integer(stationInventoryRow, "typeID"));
+        Assert.Equal(1_000_002, Integer(stationInventoryRow, "ownerID"));
+        Assert.Equal(30_002_780, Integer(stationInventoryRow, "locationID"));
+        Assert.Equal(0, Integer(stationInventoryRow, "flagID"));
+        Assert.Equal(-1, Integer(stationInventoryRow, "quantity"));
+        Assert.Equal(15, Integer(stationInventoryRow, "groupID"));
+        Assert.Equal(3, Integer(stationInventoryRow, "categoryID"));
+
+        PyTuple leases = Assert.IsType<PyTuple>(await client.CallAsync(
+            "invbroker",
+            "MachoBindObject",
+            new PyTuple(
+                inventoryObject,
+                new PyTuple(
+                    new PyBuffer("GetInventoryFromId"u8),
+                    new PyTuple(new PyInteger(190_000_007), new PyInteger(1)),
+                    new PyDictionary()))));
+        Assert.Equal(2, leases.Items.Length);
+        string shipBinding = LeaseBinding(leases.Items[1]);
+        PyPackedRow ship = Assert.IsType<PyPackedRow>(await client.CallAsync(
+            service: null,
+            "GetSelfInvItem",
+            new PyTuple(),
+            shipBinding));
+        IReadOnlyDictionary<string, PyValue> shipRow = PackedRowTestReader.Read(ship);
+        Assert.Equal(190_000_007, Integer(shipRow, "itemID"));
+        Assert.Equal(601, Integer(shipRow, "typeID"));
+        Assert.Equal(90_000_007, Integer(shipRow, "ownerID"));
+        Assert.Equal(60_000_004, Integer(shipRow, "locationID"));
+        Assert.Equal(4, Integer(shipRow, "flagID"));
+        Assert.Equal(-1, Integer(shipRow, "quantity"));
+        Assert.Equal(25, Integer(shipRow, "groupID"));
+        Assert.Equal(6, Integer(shipRow, "categoryID"));
+        Assert.Equal(0, Assert.IsType<PyInteger>(await client.CallAsync(
+            service: null,
+            "GetAvailableTurretSlots",
+            new PyTuple(),
+            shipBinding)).Value);
+
+        Assert.IsType<PyTuple>(await client.CallAsync(
+            "invbroker",
+            "MachoBindObject",
+            new PyTuple(
+                inventoryObject,
+                new PyTuple(
+                    new PyBuffer("GetInventory"u8),
+                    new PyTuple(new PyInteger(10_004), PyNull.Instance),
+                    new PyDictionary()))));
+        PyExtendedObject emptyShipInventory = Assert.IsType<PyExtendedObject>(
+            await client.CallAsync(
+                service: null,
+                "List",
+                new PyTuple(),
+                shipBinding));
+        PyTuple emptyShipInventoryHeader = Assert.IsType<PyTuple>(emptyShipInventory.Header);
+        Assert.Empty(Assert.IsType<PyList>(
+            Assert.IsType<PyTuple>(emptyShipInventoryHeader.Items[1]).Items[0]).Items);
+    }
+
+    [Fact]
+    public async Task SavedValueTelemetryAfterSelectionKeepsConnectionAliveForPing()
+    {
+        await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
+        using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
+        await client.CompleteHandshakeAsync();
+
+        PyList selection = Assert.IsType<PyList>(await client.CallAsync(
+            "charUnboundMgr",
+            "GetCharacterSelectionData",
+            new PyTuple()));
+        IReadOnlyDictionary<string, PyValue> character = AssertCharacterSelectionShape(selection);
+        long selectCallId = await client.WriteCallAsync(
+            "charUnboundMgr",
+            "SelectCharacterID",
+            new PyTuple(
+                new PyInteger(Integer(character, "characterID")),
+                PyNull.Instance,
+                new PyBoolean(false)));
+        Assert.Equal(16, (await client.ReadPacketAsync()).NumericType);
+        Assert.IsType<PyNull>(await client.ReadCallResponseAsync(selectCallId));
+
+        byte[] savedValueTelemetryCall =
+        [
+            0x7E, 0x01, 0x00, 0x00, 0x00,
+            0x14, 0x04,
+            0x09,
+            0x13, 0x0E,
+            0x4C, 0x6F, 0x67, 0x43, 0x6C, 0x69, 0x65,
+            0x6E, 0x74, 0x53, 0x74, 0x61, 0x74, 0x73,
+            0x25,
+            0x2C, 0x48, 0x1B, 0x01,
+            0x16, 0x00,
+            0x01, 0x00, 0x00, 0x00,
+        ];
+        long telemetryCallId = await client.WriteEncodedCallAsync(
+            "eventLog",
+            savedValueTelemetryCall);
+        Assert.IsType<PyNull>(await client.ReadCallResponseAsync(telemetryCallId));
+
+        var ping = new MachoPacket(
+            "carbon.common.script.net.machoNetPacket.PingReq",
+            20,
+            new MachoClientAddress(0, 501),
+            MachoAnyAddress.Instance,
+            7,
+            new PyTuple(new PyList()),
+            Enumerable.Repeat<PyValue>(PyNull.Instance, 9).ToImmutableArray());
+        await client.WritePacketAsync(ping);
+
+        MachoPacket pong = await client.ReadPacketAsync();
+        Assert.Equal(21, pong.NumericType);
+        Assert.Equal(501, Assert.IsType<MachoClientAddress>(pong.Destination).CallId);
+    }
+
+    [Fact]
+    public async Task ClientObjectReleaseNotificationKeepsConnectionAliveForPing()
+    {
+        await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
+        using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
+        await client.CompleteHandshakeAsync();
+        ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
+        byte[] notificationBody = BlueMarshalCodec.Encode(
+            new PyTuple(
+                new PyList(new PyTuple(new PyBuffer("N=2293123:441846"u8), new PyInteger(1))),
+                new PyBuffer("ClientHasReleasedTheseObjects"u8),
+                new PyTuple(),
+                new PyDictionary(new PyDictionaryEntry(new PyText("machoVersion"), new PyInteger(1)))),
+            profile);
+        var notification = new MachoPacket(
+            "carbon.common.script.net.machoNetPacket.Notification",
+            12,
+            new MachoNodeAddress(null, null),
+            new MachoNodeAddress(2_293_123, null),
+            1,
+            new PyTuple(new PyTuple(
+                new PyInteger(1),
+                new PySubstream(ImmutableArray.Create(notificationBody)))),
+            Enumerable.Repeat<PyValue>(PyNull.Instance, 9).ToImmutableArray());
+        await client.WritePacketAsync(notification);
+
+        var ping = new MachoPacket(
+            "carbon.common.script.net.machoNetPacket.PingReq",
+            20,
+            new MachoClientAddress(0, 502),
+            MachoAnyAddress.Instance,
+            7,
+            new PyTuple(new PyList()),
+            Enumerable.Repeat<PyValue>(PyNull.Instance, 9).ToImmutableArray());
+        await client.WritePacketAsync(ping);
+
+        MachoPacket pong = await client.ReadPacketAsync();
+        Assert.Equal(21, pong.NumericType);
+        Assert.Equal(502, Assert.IsType<MachoClientAddress>(pong.Destination).CallId);
     }
 
     [Fact]
@@ -339,13 +818,18 @@ public class ConnectionIoTests
         Assert.Equal(corporationId, Integer(ticker, "corporationID"));
         Assert.Equal("SARB", Text(ticker["tickerName"]));
 
-        await client.CallAsync(
+        long selectCallId = await client.WriteCallAsync(
             "charUnboundMgr",
             "SelectCharacterID",
             new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
         MachoPacket selectionNotification = await client.ReadPacketAsync();
-        AssertSessionStation(selectionNotification, stationId);
+        AssertSelectionStation(selectionNotification, stationId);
+        Assert.IsType<PyNull>(await client.ReadCallResponseAsync(selectCallId));
         long shipId = CurrentSessionValue(selectionNotification, "shipid");
+        Assert.IsType<PyInteger>(await client.CallAsync(
+            "machoNet",
+            "GetTime",
+            new PyTuple()));
 
         var nestedUndock = new PyTuple(
             new PyBuffer("Undock"u8),
@@ -417,6 +901,10 @@ public class ConnectionIoTests
             "charUnboundMgr",
             "SelectCharacterID",
             new PyTuple(new PyInteger(90_000_007))));
+        Assert.IsType<PyInteger>(await client.CallAsync(
+            "machoNet",
+            "GetTime",
+            new PyTuple()));
     }
 
     private static IReadOnlyDictionary<string, PyValue> AssertCharacterSelectionShape(PyList selection)
@@ -511,17 +999,38 @@ public class ConnectionIoTests
     private static long Integer(IReadOnlyDictionary<string, PyValue> dictionary, string key)
         => Assert.IsType<PyInteger>(dictionary[key]).Value;
 
+    private static string LeaseBinding(PyValue value)
+    {
+        PySubstream substream = Assert.IsType<PySubstream>(
+            Assert.IsType<PySubstructure>(value).Value);
+        DecodeResult<PyValue> decoded = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(substream.Data.AsMemory()),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+        Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
+        return Text(Assert.IsType<PyTuple>(decoded.Value).Items[0]);
+    }
+
     private static long CurrentSessionValue(MachoPacket packet, string key)
     {
-        PyDictionary session = Assert.IsType<PyDictionary>(packet.Payload);
+        PyDictionary session = SessionChanges(packet);
         PyTuple change = Assert.IsType<PyTuple>(Value(session, key));
         return Assert.IsType<PyInteger>(change.Items[1]).Value;
+    }
+
+    private static void AssertSelectionStation(MachoPacket packet, long? expectedStationId)
+    {
+        Assert.Equal(16, packet.NumericType);
+        AssertStationChange(SessionChanges(packet), expectedStationId);
     }
 
     private static void AssertSessionStation(MachoPacket packet, long? expectedStationId)
     {
         Assert.Equal(12, packet.NumericType);
-        PyDictionary session = Assert.IsType<PyDictionary>(packet.Payload);
+        AssertStationChange(Assert.IsType<PyDictionary>(packet.Payload), expectedStationId);
+    }
+
+    private static void AssertStationChange(PyDictionary session, long? expectedStationId)
+    {
         PyTuple change = Assert.IsType<PyTuple>(Value(session, "stationid"));
         if (expectedStationId is long stationId)
         {
@@ -533,8 +1042,21 @@ public class ConnectionIoTests
         }
     }
 
+    private static PyDictionary SessionChanges(MachoPacket packet)
+    {
+        if (packet.NumericType == 12)
+        {
+            return Assert.IsType<PyDictionary>(packet.Payload);
+        }
+
+        Assert.Equal(16, packet.NumericType);
+        PyTuple payload = Assert.IsType<PyTuple>(packet.Payload);
+        PyTuple envelope = Assert.IsType<PyTuple>(payload.Items[1]);
+        return Assert.IsType<PyDictionary>(envelope.Items[1]);
+    }
+
     private static PyValue Value(PyDictionary dictionary, string key)
-        => dictionary.Entries.Single(entry => entry.Key is PyText text && text.Value == key).Value;
+        => dictionary.Entries.Single(entry => Text(entry.Key) == key).Value;
 
     private static PyValue Value(PyDictionary dictionary, long key)
         => dictionary.Entries.Single(entry => entry.Key is PyInteger integer && integer.Value == key).Value;

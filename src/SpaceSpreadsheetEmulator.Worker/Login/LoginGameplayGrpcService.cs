@@ -3,6 +3,7 @@ using Google.Protobuf;
 using Grpc.Core;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
+using SpaceSpreadsheetEmulator.Gameplay.Stations;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.StaticData;
@@ -16,6 +17,7 @@ public sealed partial class LoginGameplayGrpcService(
     IStaticDataStore staticData,
     IAccountAuthenticator authenticator,
     ICharacterSelectionQuery characterSelection,
+    IStationCatalogQuery stationCatalog,
     LoginTicketRegistry tickets,
     ILogger<LoginGameplayGrpcService> logger) : LoginGameplay.LoginGameplayBase
 {
@@ -104,6 +106,46 @@ public sealed partial class LoginGameplayGrpcService(
         return response;
     }
 
+    public override async Task<StationCatalogResponse> GetStationCatalog(
+        StationCatalogRequest request,
+        ServerCallContext context)
+    {
+        if (!BackplaneRequestValidator.TryValidateContext(request.Context, out NodeId gatewayId, out GatewaySessionId sessionId)
+            || !tickets.TryResolve(request.LoginTicket.Span, gatewayId, sessionId, out _))
+        {
+            return new StationCatalogResponse
+            {
+                Error = Error("identity.invalid_session", "The login session is invalid or expired."),
+            };
+        }
+
+        IReadOnlyList<StationCatalogEntry> stations =
+            await stationCatalog.ExecuteAsync(context.CancellationToken);
+        var response = new StationCatalogResponse();
+        response.Stations.AddRange(stations.Select(MapStation));
+        return response;
+    }
+
+    public override async Task<NpcAgentCatalogResponse> GetNpcAgentCatalog(
+        NpcAgentCatalogRequest request,
+        ServerCallContext context)
+    {
+        if (!BackplaneRequestValidator.TryValidateContext(request.Context, out NodeId gatewayId, out GatewaySessionId sessionId)
+            || !tickets.TryResolve(request.LoginTicket.Span, gatewayId, sessionId, out _))
+        {
+            return new NpcAgentCatalogResponse
+            {
+                Error = Error("identity.invalid_session", "The login session is invalid or expired."),
+            };
+        }
+
+        IReadOnlyList<StaticNpcAgent> agents =
+            await staticData.ListNpcAgentsAsync(context.CancellationToken);
+        var response = new NpcAgentCatalogResponse();
+        response.Agents.AddRange(agents.Select(MapAgent));
+        return response;
+    }
+
     public override Task<CloseSessionResponse> CloseSession(
         CloseSessionRequest request,
         ServerCallContext context)
@@ -128,15 +170,25 @@ public sealed partial class LoginGameplayGrpcService(
             BloodlineId = character.BloodlineId,
             AncestryId = character.AncestryId,
             CharacterTypeId = character.CharacterTypeId,
+            CharacterGroupId = character.CharacterGroupId,
+            CharacterCategoryId = character.CharacterCategoryId,
             CorporationId = character.CorporationId,
             CorporationName = character.CorporationName,
+            HeadquartersStationId = character.HeadquartersStationId,
             StationName = character.StationName ?? string.Empty,
+            StationOwnerId = character.StationOwnerId ?? 0,
+            StationOperationId = character.StationOperationId ?? 0,
+            StationTypeId = character.StationTypeId ?? 0,
+            StationGroupId = character.StationGroupId ?? 0,
+            StationCategoryId = character.StationCategoryId ?? 0,
             SolarSystemId = character.SolarSystemId,
             SolarSystemName = character.SolarSystemName,
             ConstellationId = character.ConstellationId,
             RegionId = character.RegionId,
             ShipId = character.ShipId,
             ShipTypeId = character.ShipTypeId,
+            ShipGroupId = character.ShipGroupId,
+            ShipCategoryId = character.ShipCategoryId,
             ShipName = character.ShipName,
             Balance = character.Balance.ToString(CultureInfo.InvariantCulture),
             SkillPoints = character.SkillPoints,
@@ -145,6 +197,45 @@ public sealed partial class LoginGameplayGrpcService(
         if (character.StationId is int stationId)
         {
             response.StationId = stationId;
+        }
+
+        return response;
+    }
+
+    private static StationSummary MapStation(StationCatalogEntry station)
+        => new()
+        {
+            StationId = station.StationId,
+            SolarSystemId = station.SolarSystemId,
+            OperationId = station.OperationId,
+            StationTypeId = station.StationTypeId,
+            OwnerId = station.OwnerId,
+        };
+
+    private static NpcAgentSummary MapAgent(StaticNpcAgent agent)
+    {
+        var response = new NpcAgentSummary
+        {
+            AgentId = agent.AgentId,
+            AgentTypeId = agent.AgentTypeId,
+            DivisionId = agent.DivisionId,
+            Level = agent.Level,
+            Gender = agent.Gender,
+            IsLocatorAgent = agent.IsLocatorAgent,
+        };
+        if (agent.StationId is long stationId)
+        {
+            response.StationId = stationId;
+        }
+
+        if (agent.BloodlineId is int bloodlineId)
+        {
+            response.BloodlineId = bloodlineId;
+        }
+
+        if (agent.CorporationId is long corporationId)
+        {
+            response.CorporationId = corporationId;
         }
 
         return response;

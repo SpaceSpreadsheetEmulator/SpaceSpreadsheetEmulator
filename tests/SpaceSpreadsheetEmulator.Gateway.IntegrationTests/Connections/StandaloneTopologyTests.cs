@@ -37,13 +37,27 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         long stationId = Integer(selected, "stationID");
         long solarSystemId = Integer(selected, "solarSystemID");
 
-        await client.CallAsync(
-            "charUnboundMgr",
-            "SelectCharacterID",
-            new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
-        MachoPacket selectionNotification = await client.ReadPacketAsync();
-        AssertStation(selectionNotification, stationId);
+        MachoPacket selectionNotification = await SelectCharacterAsync(client, characterId);
+        AssertSelectionStation(selectionNotification, stationId);
         long shipId = CurrentSessionValue(selectionNotification, "shipid");
+        PyExtendedObject stationInfo = Assert.IsType<PyExtendedObject>(await client.CallCachedMethodAsync(
+            "map",
+            "GetStationInfo",
+            new PyTuple()));
+        IReadOnlyDictionary<string, PyValue> stationRow = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(Assert.Single(stationInfo.ListItems)));
+        Assert.Equal(stationId, Integer(stationRow, "stationID"));
+        Assert.Equal(solarSystemId, Integer(stationRow, "solarSystemID"));
+        PyTuple station = Assert.IsType<PyTuple>(await client.CallAsync(
+            "stationSvc",
+            "GetStationItemBits",
+            new PyTuple()));
+        Assert.Collection(
+            station.Items,
+            value => Assert.Equal(1_000_002, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.Equal(stationId, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.Equal(26, Assert.IsType<PyInteger>(value).Value),
+            value => Assert.Equal(1531, Assert.IsType<PyInteger>(value).Value));
 
         var nestedUndock = new PyTuple(
             new PyBuffer("Undock"u8),
@@ -165,13 +179,10 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
                 new PyTuple()));
             IReadOnlyDictionary<string, PyValue> selected = ReadSelectedCharacter(selection);
             long characterId = Integer(selected, "characterID");
-            await secondAccount.CallAsync(
-                "charUnboundMgr",
-                "SelectCharacterID",
-                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
+            MachoPacket selectionNotification = await SelectCharacterAsync(secondAccount, characterId);
             beforeRestart = (
                 characterId,
-                CurrentSessionValue(await secondAccount.ReadPacketAsync(), "shipid"));
+                CurrentSessionValue(selectionNotification, "shipid"));
         }
 
         await using (StandaloneTopology secondTopology = await StandaloneTopology.StartAsync(
@@ -189,13 +200,8 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
                 new PyTuple()));
             IReadOnlyDictionary<string, PyValue> selected = ReadSelectedCharacter(selection);
             long characterId = Integer(selected, "characterID");
-            await secondAccountFirst.CallAsync(
-                "charUnboundMgr",
-                "SelectCharacterID",
-                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
-            long shipId = CurrentSessionValue(
-                await secondAccountFirst.ReadPacketAsync(),
-                "shipid");
+            MachoPacket selectionNotification = await SelectCharacterAsync(secondAccountFirst, characterId);
+            long shipId = CurrentSessionValue(selectionNotification, "shipid");
 
             Assert.Equal(beforeRestart.CharacterId, characterId);
             Assert.Equal(beforeRestart.ShipId, shipId);
@@ -242,11 +248,8 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             characterId = Integer(selected, "characterID");
             stationId = Integer(selected, "stationID");
             solarSystemId = Integer(selected, "solarSystemID");
-            await client.CallAsync(
-                "charUnboundMgr",
-                "SelectCharacterID",
-                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
-            shipId = CurrentSessionValue(await client.ReadPacketAsync(), "shipid");
+            MachoPacket selectionNotification = await SelectCharacterAsync(client, characterId);
+            shipId = CurrentSessionValue(selectionNotification, "shipid");
 
             var nestedUndock = new PyTuple(
                 new PyBuffer("Undock"u8),
@@ -279,11 +282,8 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             IReadOnlyDictionary<string, PyValue> selected = ReadSelectedCharacter(selection);
             Assert.Equal(characterId, Integer(selected, "characterID"));
             Assert.IsType<PyNull>(selected["stationID"]);
-            await client.CallAsync(
-                "charUnboundMgr",
-                "SelectCharacterID",
-                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
-            AssertStation(await client.ReadPacketAsync(), expectedStationId: null);
+            MachoPacket selectionNotification = await SelectCharacterAsync(client, characterId);
+            AssertSelectionStation(selectionNotification, expectedStationId: null);
 
             PyText solarBinding = Assert.IsType<PyText>(await client.CallAsync(
                 "beyonce",
@@ -339,15 +339,39 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
 
     private static long CurrentSessionValue(MachoPacket packet, string key)
     {
-        PyDictionary session = Assert.IsType<PyDictionary>(packet.Payload);
+        PyDictionary session = SessionChanges(packet);
         PyTuple change = Assert.IsType<PyTuple>(Value(session, key));
         return Assert.IsType<PyInteger>(change.Items[1]).Value;
+    }
+
+    private static async Task<MachoPacket> SelectCharacterAsync(
+        ProtocolLoopbackClient client,
+        long characterId)
+    {
+        long callId = await client.WriteCallAsync(
+            "charUnboundMgr",
+            "SelectCharacterID",
+            new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
+        MachoPacket notification = await client.ReadPacketAsync();
+        Assert.Equal(16, notification.NumericType);
+        Assert.IsType<PyNull>(await client.ReadCallResponseAsync(callId));
+        return notification;
+    }
+
+    private static void AssertSelectionStation(MachoPacket packet, long? expectedStationId)
+    {
+        Assert.Equal(16, packet.NumericType);
+        AssertStationChange(SessionChanges(packet), expectedStationId);
     }
 
     private static void AssertStation(MachoPacket packet, long? expectedStationId)
     {
         Assert.Equal(12, packet.NumericType);
-        PyDictionary session = Assert.IsType<PyDictionary>(packet.Payload);
+        AssertStationChange(Assert.IsType<PyDictionary>(packet.Payload), expectedStationId);
+    }
+
+    private static void AssertStationChange(PyDictionary session, long? expectedStationId)
+    {
         PyTuple change = Assert.IsType<PyTuple>(Value(session, "stationid"));
         if (expectedStationId is long stationId)
         {
@@ -357,6 +381,19 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         {
             Assert.IsType<PyNull>(change.Items[1]);
         }
+    }
+
+    private static PyDictionary SessionChanges(MachoPacket packet)
+    {
+        if (packet.NumericType == 12)
+        {
+            return Assert.IsType<PyDictionary>(packet.Payload);
+        }
+
+        Assert.Equal(16, packet.NumericType);
+        PyTuple payload = Assert.IsType<PyTuple>(packet.Payload);
+        PyTuple envelope = Assert.IsType<PyTuple>(payload.Items[1]);
+        return Assert.IsType<PyDictionary>(envelope.Items[1]);
     }
 
     private static PyValue Value(PyDictionary dictionary, string key)

@@ -20,6 +20,14 @@ internal static class Build3396210OwnerMapper
         new("color3", 2),
     ];
 
+    private static readonly Build3396210RowField[] CorporationMemberFields =
+    [
+        new("ownerID", 20),
+        new("ownerName", 130),
+        new("typeID", 3),
+        new("gender", 11),
+    ];
+
     public static PyTuple CreateOwners(
         CharacterSelectionResponse? selection,
         IReadOnlySet<long> requestedIds)
@@ -85,6 +93,19 @@ internal static class Build3396210OwnerMapper
         return Build3396210PackedRowBuilder.CreateHeaderAndRows(
             CorporationTickerFields,
             rows);
+    }
+
+    public static PyExtendedObject CreateCorporationMembers(CharacterSummary character)
+    {
+        ArgumentNullException.ThrowIfNull(character);
+        return Build3396210PackedRowBuilder.CreateRowset(
+            CorporationMemberFields,
+            [
+                new PyInteger(character.CharacterId),
+                new PyText(character.Name),
+                new PyInteger(character.CharacterTypeId),
+                new PyBoolean(false),
+            ]);
     }
 
     private static string CreateTicker(string corporationName)

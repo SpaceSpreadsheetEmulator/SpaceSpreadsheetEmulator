@@ -21,12 +21,18 @@ internal ref partial struct BlueMarshalDecoder
         if (opcode == BlueOpcodes.SavedValueReference)
         {
             uint index = ReadSize(path);
-            if (index == 0 || index > savedValues.Count)
+            if (index == 0 || index > savedValues.Length)
             {
-                Fail(ProtocolErrorCodes.InvalidReference, path, $"Saved-value index {index} does not exist.");
+                Fail(ProtocolErrorCodes.InvalidReference, path, $"Saved-value index {index} has not been populated.");
             }
 
-            return new PySavedValueReference((int)index, savedValues[(int)index - 1]);
+            PyValue? savedValue = savedValues[(int)index - 1];
+            if (savedValue is null)
+            {
+                Fail(ProtocolErrorCodes.InvalidReference, path, $"Saved-value index {index} has not been populated.");
+            }
+
+            return new PySavedValueReference((int)index, savedValue);
         }
 
         if (opcode == BlueOpcodes.Object)

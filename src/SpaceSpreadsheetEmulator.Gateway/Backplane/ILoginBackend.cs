@@ -31,6 +31,16 @@ public interface ILoginBackend
         ReadOnlyMemory<byte> loginTicket,
         CancellationToken cancellationToken);
 
+    Task<StationCatalogResponse?> GetStationCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken);
+
+    Task<NpcAgentCatalogResponse?> GetNpcAgentCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken);
+
     Task CloseSessionAsync(
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,

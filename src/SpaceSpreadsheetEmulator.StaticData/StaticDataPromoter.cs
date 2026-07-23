@@ -13,22 +13,30 @@ public sealed class StaticDataPromoter
 {
     public const string DatabaseFileName = "static-data.sqlite";
     public const string ManifestFileName = "compatibility-manifest.json";
-    public const int CurrentSchemaVersion = 1;
-    public const string CurrentImporterVersion = "1.0.0";
+    public const int CurrentSchemaVersion = 4;
+    public const string CurrentImporterVersion = "1.3.0";
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
 
     private static readonly ImportDefinition[] Imports =
     [
-        new("races.jsonl", StaticDataEntityKind.Race, null, null, null, null),
-        new("bloodlines.jsonl", StaticDataEntityKind.Bloodline, "raceID", null, null, "corporationID"),
-        new("ancestries.jsonl", StaticDataEntityKind.Ancestry, "bloodlineID", null, null, null),
-        new("factions.jsonl", StaticDataEntityKind.Faction, null, null, null, "corporationID"),
-        new("types.jsonl", StaticDataEntityKind.Type, "groupID", null, null, null),
-        new("npcCorporations.jsonl", StaticDataEntityKind.NpcCorporation, "stationID", null, null, null),
-        new("npcStations.jsonl", StaticDataEntityKind.NpcStation, "solarSystemID", null, "typeID", "ownerID"),
-        new("mapRegions.jsonl", StaticDataEntityKind.Region, "factionID", null, null, null),
-        new("mapConstellations.jsonl", StaticDataEntityKind.Constellation, "regionID", null, null, null),
-        new("mapSolarSystems.jsonl", StaticDataEntityKind.SolarSystem, "constellationID", "regionID", null, null),
+        new("races.jsonl", StaticDataEntityKind.Race, null, null, null, null, null),
+        new("bloodlines.jsonl", StaticDataEntityKind.Bloodline, "raceID", null, null, "corporationID", null),
+        new("ancestries.jsonl", StaticDataEntityKind.Ancestry, "bloodlineID", null, null, null, null),
+        new("factions.jsonl", StaticDataEntityKind.Faction, null, null, null, "corporationID", null),
+        new("types.jsonl", StaticDataEntityKind.Type, "groupID", null, null, null, null),
+        new("groups.jsonl", StaticDataEntityKind.Group, "categoryID", null, null, null, null),
+        new("npcCorporations.jsonl", StaticDataEntityKind.NpcCorporation, "stationID", null, null, null, null),
+        new(
+            "npcStations.jsonl",
+            StaticDataEntityKind.NpcStation,
+            "solarSystemID",
+            null,
+            "typeID",
+            "ownerID",
+            "operationID"),
+        new("mapRegions.jsonl", StaticDataEntityKind.Region, "factionID", null, null, null, null),
+        new("mapConstellations.jsonl", StaticDataEntityKind.Constellation, "regionID", null, null, null, null),
+        new("mapSolarSystems.jsonl", StaticDataEntityKind.SolarSystem, "constellationID", "regionID", null, null, null),
     ];
 
     public static async Task<string> PromoteAsync(
@@ -153,7 +161,19 @@ public sealed class StaticDataPromoter
                     secondary_parent_id INTEGER NULL,
                     type_id INTEGER NULL,
                     owner_id INTEGER NULL,
+                    operation_id INTEGER NULL,
                     PRIMARY KEY (kind, id)
+                ) WITHOUT ROWID;
+                CREATE TABLE npc_agents (
+                    agent_id INTEGER NOT NULL PRIMARY KEY,
+                    agent_type_id INTEGER NOT NULL,
+                    division_id INTEGER NOT NULL,
+                    level INTEGER NOT NULL,
+                    station_id INTEGER NULL,
+                    bloodline_id INTEGER NULL,
+                    corporation_id INTEGER NULL,
+                    gender INTEGER NOT NULL,
+                    is_locator_agent INTEGER NOT NULL
                 ) WITHOUT ROWID;
                 """;
             await schema.ExecuteNonQueryAsync(cancellationToken);
@@ -163,8 +183,16 @@ public sealed class StaticDataPromoter
         await using SqliteCommand insert = connection.CreateCommand();
         insert.Transaction = transaction;
         insert.CommandText = """
-            INSERT INTO records(kind, id, name, parent_id, secondary_parent_id, type_id, owner_id)
-            VALUES($kind, $id, $name, $parent, $secondaryParent, $type, $owner);
+            INSERT INTO records(
+                kind,
+                id,
+                name,
+                parent_id,
+                secondary_parent_id,
+                type_id,
+                owner_id,
+                operation_id)
+            VALUES($kind, $id, $name, $parent, $secondaryParent, $type, $owner, $operation);
             """;
         SqliteParameter kind = insert.Parameters.Add("$kind", SqliteType.Integer);
         SqliteParameter id = insert.Parameters.Add("$id", SqliteType.Integer);
@@ -173,6 +201,7 @@ public sealed class StaticDataPromoter
         SqliteParameter secondaryParent = insert.Parameters.Add("$secondaryParent", SqliteType.Integer);
         SqliteParameter type = insert.Parameters.Add("$type", SqliteType.Integer);
         SqliteParameter owner = insert.Parameters.Add("$owner", SqliteType.Integer);
+        SqliteParameter operation = insert.Parameters.Add("$operation", SqliteType.Integer);
 
         foreach (ImportDefinition definition in Imports)
         {
@@ -196,14 +225,96 @@ public sealed class StaticDataPromoter
                 secondaryParent.Value = ReadNullableInt64(root, definition.SecondaryParentProperty) ?? (object)DBNull.Value;
                 type.Value = ReadNullableInt64(root, definition.TypeProperty) ?? (object)DBNull.Value;
                 owner.Value = ReadNullableInt64(root, definition.OwnerProperty) ?? (object)DBNull.Value;
+                operation.Value = ReadNullableInt64(root, definition.OperationProperty) ?? (object)DBNull.Value;
                 await insert.ExecuteNonQueryAsync(cancellationToken);
             }
         }
 
+        await ImportNpcAgentsAsync(archive, connection, transaction, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await using SqliteCommand optimize = connection.CreateCommand();
         optimize.CommandText = "ANALYZE; VACUUM;";
         await optimize.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task ImportNpcAgentsAsync(
+        ZipArchive archive,
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        ZipArchiveEntry entry = archive.GetEntry("npcCharacters.jsonl")
+            ?? throw new InvalidDataException("The SDE archive is missing npcCharacters.jsonl.");
+        await using Stream entryStream = entry.Open();
+        using var reader = new StreamReader(entryStream);
+        await using SqliteCommand insert = connection.CreateCommand();
+        insert.Transaction = transaction;
+        insert.CommandText = """
+            INSERT INTO npc_agents(
+                agent_id,
+                agent_type_id,
+                division_id,
+                level,
+                station_id,
+                bloodline_id,
+                corporation_id,
+                gender,
+                is_locator_agent)
+            VALUES(
+                $agent,
+                $type,
+                $division,
+                $level,
+                $station,
+                $bloodline,
+                $corporation,
+                $gender,
+                $locator);
+            """;
+        SqliteParameter agentId = insert.Parameters.Add("$agent", SqliteType.Integer);
+        SqliteParameter agentTypeId = insert.Parameters.Add("$type", SqliteType.Integer);
+        SqliteParameter divisionId = insert.Parameters.Add("$division", SqliteType.Integer);
+        SqliteParameter level = insert.Parameters.Add("$level", SqliteType.Integer);
+        SqliteParameter stationId = insert.Parameters.Add("$station", SqliteType.Integer);
+        SqliteParameter bloodlineId = insert.Parameters.Add("$bloodline", SqliteType.Integer);
+        SqliteParameter corporationId = insert.Parameters.Add("$corporation", SqliteType.Integer);
+        SqliteParameter gender = insert.Parameters.Add("$gender", SqliteType.Integer);
+        SqliteParameter locator = insert.Parameters.Add("$locator", SqliteType.Integer);
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            using JsonDocument document = JsonDocument.Parse(line);
+            JsonElement root = document.RootElement;
+            if (!root.TryGetProperty("agent", out JsonElement agent)
+                || agent.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            agentId.Value = root.GetProperty("_key").GetInt64();
+            agentTypeId.Value = agent.GetProperty("agentTypeID").GetInt32();
+            divisionId.Value = agent.GetProperty("divisionID").GetInt32();
+            level.Value = agent.GetProperty("level").GetInt32();
+            stationId.Value = ReadNullableInt64(root, "locationID") ?? (object)DBNull.Value;
+            bloodlineId.Value = ReadNullableInt64(root, "bloodlineID") ?? (object)DBNull.Value;
+            corporationId.Value = ReadNullableInt64(root, "corporationID") ?? (object)DBNull.Value;
+            gender.Value = root.TryGetProperty("gender", out JsonElement genderValue)
+                && genderValue.ValueKind is JsonValueKind.True or JsonValueKind.False
+                && genderValue.GetBoolean()
+                    ? 1
+                    : 0;
+            locator.Value = agent.TryGetProperty("isLocator", out JsonElement locatorValue)
+                && locatorValue.ValueKind is JsonValueKind.True or JsonValueKind.False
+                && locatorValue.GetBoolean()
+                    ? 1
+                    : 0;
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private static string ReadName(JsonElement root)
@@ -237,5 +348,6 @@ public sealed class StaticDataPromoter
         string? ParentProperty,
         string? SecondaryParentProperty,
         string? TypeProperty,
-        string? OwnerProperty);
+        string? OwnerProperty,
+        string? OperationProperty);
 }

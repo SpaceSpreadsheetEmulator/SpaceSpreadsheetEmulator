@@ -1,0 +1,9 @@
+# two save occurrences mapped to slots 2 then 1; references resolve by slot
+7e 02 00 00 00
+14 04
+48
+49
+1b 01
+1b 02
+02 00 00 00
+01 00 00 00

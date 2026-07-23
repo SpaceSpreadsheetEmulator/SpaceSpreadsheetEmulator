@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 
@@ -10,11 +12,13 @@ internal sealed class ChildServerProcess : IAsyncDisposable
     private readonly ConcurrentQueue<string> logLines = new();
     private readonly Task standardOutput;
     private readonly Task standardError;
+    private readonly DirectoryInfo runtimeDirectory;
 
-    private ChildServerProcess(string name, Process process)
+    private ChildServerProcess(string name, Process process, DirectoryInfo runtimeDirectory)
     {
         Name = name;
         this.process = process;
+        this.runtimeDirectory = runtimeDirectory;
         standardOutput = CaptureAsync(process.StandardOutput);
         standardError = CaptureAsync(process.StandardError);
     }
@@ -26,12 +30,39 @@ internal sealed class ChildServerProcess : IAsyncDisposable
     public static ChildServerProcess Start(
         string name,
         string assemblyPath,
-        IReadOnlyDictionary<string, string> environment)
+        string environment,
+        Action<JsonObject> configureSettings)
     {
         if (!File.Exists(assemblyPath))
         {
             throw new FileNotFoundException($"The {name} test assembly has not been built.", assemblyPath);
         }
+
+        string assemblyDirectory = Path.GetDirectoryName(assemblyPath)
+            ?? throw new DirectoryNotFoundException($"Could not locate the {name} assembly directory.");
+        string baseSettingsSource = Path.Combine(assemblyDirectory, "appsettings.json");
+        string profileFileName = $"appsettings.{environment}.json";
+        string profileSettingsSource = Path.Combine(assemblyDirectory, profileFileName);
+        if (!File.Exists(baseSettingsSource) || !File.Exists(profileSettingsSource))
+        {
+            throw new FileNotFoundException(
+                $"The {name} {environment} appsettings files have not been built.");
+        }
+
+        DirectoryInfo runtimeDirectory = Directory.CreateTempSubdirectory(
+            $"space-spreadsheet-emulator-{name.ToLowerInvariant()}-");
+        File.Copy(baseSettingsSource, Path.Combine(runtimeDirectory.FullName, "appsettings.json"));
+        JsonObject settings = JsonNode.Parse(File.ReadAllText(baseSettingsSource))?.AsObject()
+            ?? throw new InvalidDataException(
+                $"The {name} base appsettings file is empty.");
+        JsonObject profileSettings = JsonNode.Parse(File.ReadAllText(profileSettingsSource))?.AsObject()
+            ?? throw new InvalidDataException(
+                $"The {name} {environment} appsettings file is empty.");
+        Merge(settings, profileSettings);
+        configureSettings(settings);
+        File.WriteAllText(
+            Path.Combine(runtimeDirectory.FullName, profileFileName),
+            settings.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
 
         var startInfo = new ProcessStartInfo("dotnet")
         {
@@ -39,20 +70,23 @@ internal sealed class ChildServerProcess : IAsyncDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-            WorkingDirectory = Path.GetDirectoryName(assemblyPath)
-                ?? throw new DirectoryNotFoundException($"Could not locate the {name} assembly directory."),
+            WorkingDirectory = runtimeDirectory.FullName,
         };
         startInfo.ArgumentList.Add(assemblyPath);
-        startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Testing";
-        startInfo.Environment["DOTNET_ENVIRONMENT"] = "Testing";
-        foreach ((string key, string value) in environment)
-        {
-            startInfo.Environment[key] = value;
-        }
+        startInfo.ArgumentList.Add("--environment");
+        startInfo.ArgumentList.Add(environment);
 
-        Process process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Could not start the {name} test process.");
-        return new ChildServerProcess(name, process);
+        try
+        {
+            Process process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException($"Could not start the {name} test process.");
+            return new ChildServerProcess(name, process, runtimeDirectory);
+        }
+        catch
+        {
+            runtimeDirectory.Delete(recursive: true);
+            throw;
+        }
     }
 
     public string DescribeLogs()
@@ -75,6 +109,10 @@ internal sealed class ChildServerProcess : IAsyncDisposable
 
         await Task.WhenAll(standardOutput, standardError).WaitAsync(TimeSpan.FromSeconds(5));
         process.Dispose();
+        if (runtimeDirectory.Exists)
+        {
+            runtimeDirectory.Delete(recursive: true);
+        }
     }
 
     private async Task CaptureAsync(StreamReader reader)
@@ -86,6 +124,21 @@ internal sealed class ChildServerProcess : IAsyncDisposable
             {
                 logLines.TryDequeue(out _);
             }
+        }
+    }
+
+    private static void Merge(JsonObject target, JsonObject source)
+    {
+        foreach ((string propertyName, JsonNode? sourceValue) in source)
+        {
+            if (target[propertyName] is JsonObject targetObject
+                && sourceValue is JsonObject sourceObject)
+            {
+                Merge(targetObject, sourceObject);
+                continue;
+            }
+
+            target[propertyName] = sourceValue?.DeepClone();
         }
     }
 }

@@ -10,3 +10,5 @@ riderModule.iml
 /_local/e2e-evidence
 /artifacts/
 /infrastructure/.env
+/src/**/appsettings.*.local.json
+/tests/**/appsettings.*.local.json

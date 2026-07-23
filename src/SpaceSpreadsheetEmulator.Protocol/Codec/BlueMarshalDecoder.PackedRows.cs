@@ -27,7 +27,7 @@ internal ref partial struct BlueMarshalDecoder
         header = Dereference(header);
         if (header is not PyExtendedObject extended || extended.Variant != 1
             || Dereference(extended.Header) is not PyTuple objectHeader
-            || objectHeader.Items.Length != 2)
+            || objectHeader.Items.Length is < 2 or > 3)
         {
             throw CreateError(ProtocolErrorCodes.InvalidValue, reader.Consumed, $"{path}.header", "A packed row requires a blue.DBRowDescriptor header.");
         }

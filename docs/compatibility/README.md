@@ -13,20 +13,29 @@ character selection, session state, routing, and gameplay mutations are always
 authored from current server state. Disallowed manifest entries are ignored before
 their payload files are opened.
 
-Private capture validation is intentionally local-only. Put parser-generated `frames*.jsonl`
-exports below `_local/protocol-captures/`, or set `SSE_LOCAL_PROTOCOL_CAPTURE_DIRECTORY`
-to another directory. The local-capture test skips when that directory is absent or contains
-no exports. The directory is gitignored; captures, session material, keys, and login primitives
-must never be committed.
+Private capture validation is intentionally local-only. Put parser-generated
+`frames*.jsonl` exports below `_local/protocol-captures/`, or set
+`ProtocolTests:LocalCaptureDirectory` in the ignored
+`tests/SpaceSpreadsheetEmulator.Protocol.Tests/appsettings.UnitTest.local.json`.
+The local-capture test skips when that directory is absent or contains no exports.
+The directory and local settings file are gitignored; captures, session material,
+keys, and login primitives must never be committed.
 
-The local gate validates bounded zlib decompression, marshal decoding, exact
-preserve-mode re-encoding, canonical semantic round-trips, and non-sensitive Macho
-packet/address summaries. Milestone 2 adds checked-in fabricated tests for the login
-handshake, independent inbound/outbound AES-CBC chains, correlated calls, and the
-legacy ping exchange. Its Gateway integration fixture also reconstructs the
-build-3396210 account and character packed rows independently and verifies a complete
-select/undock/dock loopback flow. Private credentials, hashes, session keys, and
-captured packets remain local-only.
+The default local gate validates bounded zlib decompression, outer marshal decoding,
+exact preserve-mode re-encoding, canonical semantic round-trips, and non-sensitive
+Macho packet/address summaries. Set `ProtocolTests:LocalCaptureDirectory` explicitly
+to one build-3396210 capture directory in the local UnitTest appsettings file to
+enable the stricter gate that descends into every client `CALL_REQ` and type-12
+client notification present, decodes the nested substream, preserves its exact
+bytes, and validates the typed envelope. This explicit pin prevents a mixed
+directory of different client builds from being treated as one protocol profile.
+
+Milestone 2 adds checked-in fabricated tests for the login handshake, independent
+inbound/outbound AES-CBC chains, correlated calls, and the legacy ping exchange. Its
+Gateway integration fixture also reconstructs the build-3396210 account and character
+packed rows independently and verifies a complete select/undock/dock loopback flow.
+Private credentials, hashes, session keys, and captured packets remain local-only.
 
 See `login-3396210.md` for the independently authored handshake and initial-session
-behavioral specification.
+behavioral specification and `station-entry-3396210.md` for the post-selection
+station-entry sequence and graphical compatibility gate.

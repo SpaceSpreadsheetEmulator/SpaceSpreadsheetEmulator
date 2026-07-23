@@ -8,6 +8,8 @@ internal sealed class TestLoginBackend : ILoginBackend
 {
     public Func<CharacterSelectionResponse?>? CharacterSelectionFactory { get; set; }
 
+    public Func<NpcAgentCatalogResponse?>? NpcAgentCatalogFactory { get; set; }
+
     public Task<bool> IsCompatibleAsync(CancellationToken cancellationToken)
         => Task.FromResult(true);
 
@@ -42,21 +44,74 @@ internal sealed class TestLoginBackend : ILoginBackend
             BloodlineId = 1,
             AncestryId = 10,
             CharacterTypeId = 1373,
+            CharacterGroupId = 1,
+            CharacterCategoryId = 1,
             CorporationId = 1_000_002,
             CorporationName = "State and Region Bank",
+            HeadquartersStationId = 60_000_004,
             StationId = 60_000_004,
             StationName = "Starter Station",
+            StationOwnerId = 1_000_002,
+            StationOperationId = 26,
+            StationTypeId = 1531,
+            StationGroupId = 15,
+            StationCategoryId = 3,
             SolarSystemId = 30_002_780,
             SolarSystemName = "New Caldari",
             ConstellationId = 20_000_407,
             RegionId = 10_000_033,
             ShipId = 190_000_007,
             ShipTypeId = 601,
+            ShipGroupId = 25,
+            ShipCategoryId = 6,
             ShipName = "Cell Reference",
             Balance = "5000",
             SkillPoints = 400_000,
         });
         return Task.FromResult<CharacterSelectionResponse?>(response);
+    }
+
+    public Task<StationCatalogResponse?> GetStationCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken)
+    {
+        var response = new StationCatalogResponse();
+        response.Stations.Add(new StationSummary
+        {
+            StationId = 60_000_004,
+            SolarSystemId = 30_002_780,
+            OperationId = 26,
+            StationTypeId = 1531,
+            OwnerId = 1_000_002,
+        });
+        return Task.FromResult<StationCatalogResponse?>(response);
+    }
+
+    public Task<NpcAgentCatalogResponse?> GetNpcAgentCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken)
+    {
+        if (NpcAgentCatalogFactory is not null)
+        {
+            return Task.FromResult(NpcAgentCatalogFactory());
+        }
+
+        var response = new NpcAgentCatalogResponse();
+        response.Agents.Add(new NpcAgentSummary
+        {
+            AgentId = 3_008_416,
+            AgentTypeId = 2,
+            DivisionId = 22,
+            Level = 1,
+            StationId = 60_000_004,
+            BloodlineId = 1,
+            CorporationId = 1_000_002,
+            Gender = false,
+            IsLocatorAgent = false,
+        });
+        return Task.FromResult<NpcAgentCatalogResponse?>(response);
     }
 
     public Task CloseSessionAsync(

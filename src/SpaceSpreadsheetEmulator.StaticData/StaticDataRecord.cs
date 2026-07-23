@@ -15,6 +15,7 @@ public enum StaticDataEntityKind
     Region = 8,
     Constellation = 9,
     SolarSystem = 10,
+    Group = 11,
 }
 
 /// <summary>
@@ -27,4 +28,19 @@ public sealed record StaticDataRecord(
     long? ParentId,
     long? SecondaryParentId,
     long? TypeId,
-    long? OwnerId);
+    long? OwnerId,
+    long? OperationId);
+
+/// <summary>
+/// Represents one build-pinned NPC agent exposed by the static-data artifact.
+/// </summary>
+public sealed record StaticNpcAgent(
+    long AgentId,
+    int AgentTypeId,
+    int DivisionId,
+    int Level,
+    long? StationId,
+    int? BloodlineId,
+    long? CorporationId,
+    bool Gender,
+    bool IsLocatorAgent);

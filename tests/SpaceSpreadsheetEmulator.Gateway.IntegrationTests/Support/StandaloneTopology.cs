@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 
@@ -46,7 +45,9 @@ internal sealed class StandaloneTopology : IAsyncDisposable
             topology.processes.Add(ChildServerProcess.Start(
                 "Worker",
                 ProductionAssembly("Worker"),
-                WorkerEnvironment(
+                "AutomatedE2E",
+                settings => AutomatedE2ESettings.ConfigureWorker(
+                    settings,
                     artifactDirectory,
                     gameDatabaseConnectionString,
                     workerManagementPort,
@@ -58,7 +59,12 @@ internal sealed class StandaloneTopology : IAsyncDisposable
             topology.processes.Add(ChildServerProcess.Start(
                 "Coordinator",
                 ProductionAssembly("Coordinator"),
-                CoordinatorEnvironment(coordinatorManagementPort, coordinatorGrpcAddress, workerGrpcAddress)));
+                "AutomatedE2E",
+                settings => AutomatedE2ESettings.ConfigureCoordinator(
+                    settings,
+                    coordinatorManagementPort,
+                    coordinatorGrpcAddress,
+                    workerGrpcAddress)));
             await WaitForHealthAsync(
                 topology.processes[^1],
                 new Uri($"http://127.0.0.1:{coordinatorManagementPort}/health/ready"));
@@ -66,7 +72,9 @@ internal sealed class StandaloneTopology : IAsyncDisposable
             topology.processes.Add(ChildServerProcess.Start(
                 "Gateway",
                 ProductionAssembly("Gateway"),
-                GatewayEnvironment(
+                "AutomatedE2E",
+                settings => AutomatedE2ESettings.ConfigureGateway(
+                    settings,
                     gatewayManagementPort,
                     gatewayTcpPort,
                     coordinatorGrpcAddress,
@@ -93,68 +101,6 @@ internal sealed class StandaloneTopology : IAsyncDisposable
 
         processes.Clear();
     }
-
-    private static IReadOnlyDictionary<string, string> WorkerEnvironment(
-        string artifactDirectory,
-        string gameDatabaseConnectionString,
-        int managementPort,
-        Uri grpcAddress)
-        => new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Kestrel__Endpoints__Management__Url"] = $"http://127.0.0.1:{managementPort}",
-            ["Kestrel__Endpoints__Backplane__Url"] = grpcAddress.AbsoluteUri,
-            ["ConnectionStrings__GameDatabase"] = gameDatabaseConnectionString,
-            ["Worker__Login__Enabled"] = bool.TrueString,
-            ["Worker__Login__ArtifactDirectory"] = artifactDirectory,
-            ["Worker__Login__DevelopmentEnrollmentEnabled"] = bool.TrueString,
-            ["Worker__SolarSystem__Enabled"] = bool.TrueString,
-            ["Worker__SolarSystem__NodeId"] = "worker-topology",
-            ["Worker__SolarSystem__CommandQueueCapacity"] = "64",
-            ["Worker__SolarSystem__Assignments__0__SolarSystemId"] = "30002780",
-            ["Worker__SolarSystem__Assignments__0__Epoch"] = "7",
-            ["Worker__SolarSystem__Assignments__0__EntryPoints__0__StationId"] = "60000004",
-            ["Worker__SolarSystem__Assignments__0__EntryPoints__0__X"] = "100",
-            ["Worker__SolarSystem__Assignments__0__EntryPoints__0__Y"] = "-50",
-            ["Worker__SolarSystem__Assignments__0__EntryPoints__0__Z"] = "25",
-            ["Worker__SolarSystem__Assignments__1__SolarSystemId"] = "30000142",
-            ["Worker__SolarSystem__Assignments__1__Epoch"] = "9",
-        };
-
-    private static IReadOnlyDictionary<string, string> CoordinatorEnvironment(
-        int managementPort,
-        Uri grpcAddress,
-        Uri workerGrpcAddress)
-        => new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Kestrel__Endpoints__Management__Url"] = $"http://127.0.0.1:{managementPort}",
-            ["Kestrel__Endpoints__Grpc__Url"] = grpcAddress.AbsoluteUri,
-            ["Coordinator__BootstrapSolarSystems__Enabled"] = bool.TrueString,
-            ["Coordinator__BootstrapSolarSystems__Assignments__0__SolarSystemId"] = "30002780",
-            ["Coordinator__BootstrapSolarSystems__Assignments__0__OwnerNodeId"] = "worker-topology",
-            ["Coordinator__BootstrapSolarSystems__Assignments__0__Epoch"] = "7",
-            ["Coordinator__BootstrapSolarSystems__Assignments__0__Endpoint"] = workerGrpcAddress.AbsoluteUri,
-            ["Coordinator__BootstrapSolarSystems__Assignments__1__SolarSystemId"] = "30000142",
-            ["Coordinator__BootstrapSolarSystems__Assignments__1__OwnerNodeId"] = "worker-topology",
-            ["Coordinator__BootstrapSolarSystems__Assignments__1__Epoch"] = "9",
-            ["Coordinator__BootstrapSolarSystems__Assignments__1__Endpoint"] = workerGrpcAddress.AbsoluteUri,
-        };
-
-    private static IReadOnlyDictionary<string, string> GatewayEnvironment(
-        int managementPort,
-        int tcpPort,
-        Uri coordinatorGrpcAddress,
-        Uri workerGrpcAddress)
-        => new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Kestrel__Endpoints__Management__Url"] = $"http://127.0.0.1:{managementPort}",
-            ["Gateway__Backplane__Enabled"] = bool.TrueString,
-            ["Gateway__Backplane__Address"] = workerGrpcAddress.AbsoluteUri,
-            ["Gateway__Backplane__CoordinatorAddress"] = coordinatorGrpcAddress.AbsoluteUri,
-            ["Gateway__Backplane__GatewayId"] = "gateway-topology",
-            ["Gateway__Tcp__Enabled"] = bool.TrueString,
-            ["Gateway__Tcp__Address"] = IPAddress.Loopback.ToString(),
-            ["Gateway__Tcp__Port"] = tcpPort.ToString(CultureInfo.InvariantCulture),
-        };
 
     private static string ProductionAssembly(string projectName)
     {

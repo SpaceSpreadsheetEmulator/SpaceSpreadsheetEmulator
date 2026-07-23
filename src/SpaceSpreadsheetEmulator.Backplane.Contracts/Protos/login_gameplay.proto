@@ -8,6 +8,8 @@ service LoginGameplay {
   rpc GetCompatibility (CompatibilityRequest) returns (CompatibilityResponse);
   rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse);
   rpc GetCharacterSelection (CharacterSelectionRequest) returns (CharacterSelectionResponse);
+  rpc GetStationCatalog (StationCatalogRequest) returns (StationCatalogResponse);
+  rpc GetNpcAgentCatalog (NpcAgentCatalogRequest) returns (NpcAgentCatalogResponse);
   rpc CloseSession (CloseSessionRequest) returns (CloseSessionResponse);
 }
 
@@ -87,6 +89,59 @@ message CharacterSummary {
   int64 skill_points = 18;
   int64 last_login_unix_milliseconds = 19;
   int64 ship_id = 20;
+  int32 headquarters_station_id = 21;
+  int32 station_owner_id = 22;
+  int32 station_operation_id = 23;
+  int32 station_type_id = 24;
+  int32 ship_group_id = 25;
+  int32 ship_category_id = 26;
+  int32 station_group_id = 27;
+  int32 station_category_id = 28;
+  int32 character_group_id = 29;
+  int32 character_category_id = 30;
+}
+
+// Requests the build-pinned NPC station catalog for a validated login session.
+message StationCatalogRequest {
+  RequestContext context = 1;
+  bytes login_ticket = 2;
+}
+
+// Contains protocol-neutral station rows sourced from the pinned static-data artifact.
+message StationCatalogResponse {
+  ServiceError error = 1;
+  repeated StationSummary stations = 2;
+}
+
+message StationSummary {
+  int32 station_id = 1;
+  int32 solar_system_id = 2;
+  int32 operation_id = 3;
+  int32 station_type_id = 4;
+  int32 owner_id = 5;
+}
+
+// Requests the build-pinned NPC-agent catalog for a validated login session.
+message NpcAgentCatalogRequest {
+  RequestContext context = 1;
+  bytes login_ticket = 2;
+}
+
+message NpcAgentCatalogResponse {
+  ServiceError error = 1;
+  repeated NpcAgentSummary agents = 2;
+}
+
+message NpcAgentSummary {
+  int64 agent_id = 1;
+  int32 agent_type_id = 2;
+  int32 division_id = 3;
+  int32 level = 4;
+  optional int64 station_id = 5;
+  optional int32 bloodline_id = 6;
+  optional int64 corporation_id = 7;
+  bool gender = 8;
+  bool is_locator_agent = 9;
 }
 
 // Requests invalidation of a Gateway-scoped login session.

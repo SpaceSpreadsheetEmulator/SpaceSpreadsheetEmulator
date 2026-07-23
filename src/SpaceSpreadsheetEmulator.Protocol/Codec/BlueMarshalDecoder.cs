@@ -17,9 +17,11 @@ internal ref partial struct BlueMarshalDecoder
     private static readonly UnicodeEncoding StrictUtf16 = new(false, false, true);
     private readonly ReadOnlySequence<byte> input;
     private readonly ProtocolProfile profile;
-    private readonly List<PyValue> savedValues;
     private SequenceReader<byte> reader;
+    private PyValue?[] savedValues;
+    private int[] savedValueSlots;
     private uint declaredSavedValueCount;
+    private int nextSavedValue;
 
     public BlueMarshalDecoder(ReadOnlySequence<byte> input, ProtocolProfile profile)
     {
@@ -27,7 +29,9 @@ internal ref partial struct BlueMarshalDecoder
         this.profile = profile;
         reader = new SequenceReader<byte>(input);
         savedValues = [];
+        savedValueSlots = [];
         declaredSavedValueCount = 0;
+        nextSavedValue = 0;
     }
 
     public PyValue ReadRoot()
@@ -43,15 +47,19 @@ internal ref partial struct BlueMarshalDecoder
             Fail(ProtocolErrorCodes.LimitExceeded, "$.savedValueCount", "The declared saved-value table exceeds the configured limit.");
         }
 
+        InitializeSavedValues();
         PyValue value = ReadValue(0, "$");
         if (!reader.End)
         {
-            Fail(ProtocolErrorCodes.TrailingData, "$", "Trailing bytes follow the root value.");
+            Fail(ProtocolErrorCodes.TrailingData, "$", "Bytes remain between the root value and saved-value table.");
         }
 
-        if (savedValues.Count > declaredSavedValueCount)
+        if (nextSavedValue != savedValueSlots.Length)
         {
-            Fail(ProtocolErrorCodes.InvalidReference, "$", "More values were saved than the stream header declared.");
+            Fail(
+                ProtocolErrorCodes.InvalidReference,
+                "$.savedValues",
+                $"The stream declared {savedValueSlots.Length} saved values but encoded {nextSavedValue} save flags.");
         }
 
         return value with
@@ -112,12 +120,7 @@ internal ref partial struct BlueMarshalDecoder
 
         if (save)
         {
-            if (savedValues.Count >= declaredSavedValueCount)
-            {
-                Fail(ProtocolErrorCodes.InvalidReference, path, "A save flag exceeds the slot count declared by the stream header.");
-            }
-
-            savedValues.Add(value);
+            SaveValue(value, path);
         }
 
         return value;

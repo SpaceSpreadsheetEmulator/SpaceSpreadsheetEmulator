@@ -38,7 +38,7 @@ public class ConnectionLimitTests
     [Fact]
     public async Task OptionalDefaultCapacitySmokeTest()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable("SSE_RUN_CONNECTION_SMOKE"), "1", StringComparison.Ordinal))
+        if (!GatewayTestSettings.RunConnectionSmoke)
         {
             return;
         }

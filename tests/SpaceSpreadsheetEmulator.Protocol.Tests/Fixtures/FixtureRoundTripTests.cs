@@ -17,7 +17,7 @@ public class FixtureRoundTripTests
             .ToArray();
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
 
-        Assert.Equal(43, fixtures.Length);
+        Assert.Equal(44, fixtures.Length);
         foreach (string fixture in fixtures)
         {
             byte[] bytes = ReadHex(fixture);

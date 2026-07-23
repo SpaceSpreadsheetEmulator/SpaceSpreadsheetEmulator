@@ -62,6 +62,100 @@ public class MalformedInputTests
     }
 
     [Fact]
+    public void TruncatedSavedValueTableIsIncomplete()
+    {
+        DecodeResult<PyValue> result = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(
+                new byte[] { 0x7E, 2, 0, 0, 0, 0x01, 1, 0, 0, 0 }),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ProtocolErrorCodes.Incomplete, result.Error!.Code);
+        Assert.Equal("$.savedValueSlots", result.Error.ValuePath);
+    }
+
+    [Theory]
+    [InlineData("7E010000000100000000", "$.savedValueSlots[0]")]
+    [InlineData("7E010000000102000000", "$.savedValueSlots[0]")]
+    [InlineData("7E020000002C48490100000001000000", "$.savedValueSlots[1]")]
+    public void InvalidSavedValueSlotTablesAreRejected(string hex, string expectedPath)
+    {
+        DecodeResult<PyValue> result = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(Convert.FromHexString(hex)),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ProtocolErrorCodes.InvalidReference, result.Error!.Code);
+        Assert.Equal(expectedPath, result.Error.ValuePath);
+    }
+
+    [Fact]
+    public void FewerSaveFlagsThanDeclaredAreRejected()
+    {
+        byte[] document = [0x7E, 1, 0, 0, 0, 0x01, 1, 0, 0, 0];
+
+        DecodeResult<PyValue> result = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(document),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ProtocolErrorCodes.InvalidReference, result.Error!.Code);
+        Assert.Equal("$.savedValues", result.Error.ValuePath);
+    }
+
+    [Fact]
+    public void MoreSaveFlagsThanDeclaredAreRejected()
+    {
+        byte[] document = [0x7E, 0, 0, 0, 0, 0x41];
+
+        DecodeResult<PyValue> result = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(document),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ProtocolErrorCodes.InvalidReference, result.Error!.Code);
+        Assert.Equal("$", result.Error.ValuePath);
+    }
+
+    [Fact]
+    public void ReferenceToUnpopulatedSavedSlotIsRejected()
+    {
+        byte[] document =
+        [
+            0x7E, 1, 0, 0, 0,
+            0x2C, 0x1B, 1, 0x41,
+            1, 0, 0, 0,
+        ];
+
+        DecodeResult<PyValue> result = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(document),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ProtocolErrorCodes.InvalidReference, result.Error!.Code);
+        Assert.Equal("$.items[0]", result.Error.ValuePath);
+    }
+
+    [Fact]
+    public void BytesBetweenRootAndSavedValueTableAreTrailingData()
+    {
+        byte[] document =
+        [
+            0x7E, 1, 0, 0, 0,
+            0x01, 0x01,
+            1, 0, 0, 0,
+        ];
+
+        DecodeResult<PyValue> result = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(document),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ProtocolErrorCodes.TrailingData, result.Error!.Code);
+        Assert.Equal("$", result.Error.ValuePath);
+    }
+
+    [Fact]
     public void NestingDepthIsCheckedBeforeBuildingChildren()
     {
         var profile = new ProtocolProfile(

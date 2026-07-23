@@ -23,6 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../TestInfrastructure/TestContainerSettings.cs" Link="Support/TestContainerSettings.cs" />
+    <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Gateway/SpaceSpreadsheetEmulator.Gateway.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Persistence/SpaceSpreadsheetEmulator.Persistence.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.StaticData/SpaceSpreadsheetEmulator.StaticData.csproj" />

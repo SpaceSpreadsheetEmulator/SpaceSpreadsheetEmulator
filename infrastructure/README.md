@@ -17,22 +17,36 @@ project, starts a fresh database, and applies every migration:
 ./infrastructure/database.sh reset
 ```
 
-The Worker does not apply migrations. A login-enabled Worker requires
-`ConnectionStrings__GameDatabase`, for example:
+The Worker does not apply migrations. The local connection string is stored in the
+Worker and Persistence `appsettings.CliTest.json` profiles. The database helper
+selects the Persistence `CliTest` profile when it invokes Entity Framework tools.
+If the Compose `.env` changes the database port or credentials, place matching
+connection strings in the ignored files:
 
-```bash
-export ConnectionStrings__GameDatabase='Host=127.0.0.1;Port=5432;Database=space_spreadsheet_emulator;Username=sse;Password=local-development-only'
-```
+- `src/SpaceSpreadsheetEmulator.Worker/appsettings.CliTest.local.json`
+- `src/SpaceSpreadsheetEmulator.Persistence/appsettings.CliTest.local.json`
+
+Do not pass application connection strings as inline environment variables.
 
 ## Real PostgreSQL tests
 
 Persistence, Worker, and topology tests create disposable PostgreSQL containers
 through Testcontainers. Docker works with its normal daemon. For rootless Podman,
-enable the Docker-compatible user socket and point Testcontainers at it:
+enable the Docker-compatible user socket:
 
 ```bash
 systemctl --user enable --now podman.socket
-export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
+```
+
+Then put the endpoint in an ignored `appsettings.IntegrationTest.local.json` beside
+each integration-test project that you run:
+
+```json
+{
+  "Testcontainers": {
+    "DockerEndpoint": "unix:///run/user/<uid>/podman/podman.sock"
+  }
+}
 ```
 
 The tests fail rather than silently substituting an in-memory provider when a

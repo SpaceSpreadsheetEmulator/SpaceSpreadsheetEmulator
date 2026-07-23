@@ -66,6 +66,36 @@ hash-addressed SQLite artifact. The archive, resulting database, local certifica
 and end-to-end evidence stay below gitignored `_local` paths. Worker rejects an
 artifact unless its client, protocol, and SDE builds all equal `3396210`.
 
+## Configuration profiles
+
+Gateway, Coordinator, and Worker use the same explicit profile names:
+
+| Profile | Purpose |
+| --- | --- |
+| `Production` | Fail-closed deployment baseline. Enable endpoints and supply secrets through an ignored or mounted `appsettings.Production.local.json`. |
+| `Development` | IDE development with gameplay and external listeners disabled. |
+| `CliTest` | Build-3396210 local-client topology on the fixed loopback ports. |
+| `UnitTest` | In-process host tests with external gameplay dependencies disabled. |
+| `IntegrationTest` | In-process integration tests; temporary paths and disposable database credentials are added through a generated local JSON file. |
+| `AutomatedE2E` | Three real child processes; fixed topology lives in source and each run generates a temporary JSON overlay for reserved ports and disposable resources. |
+
+ASP.NET Core loads `appsettings.json`, then `appsettings.<Profile>.json`. Each host
+also loads an optional ignored `appsettings.<Profile>.local.json` for machine-specific
+paths and secrets. Application settings must not be supplied as long inline
+environment-variable lists.
+
+After preparing the database, start the CLI-test topology in three terminals:
+
+```bash
+dotnet run --project src/SpaceSpreadsheetEmulator.Worker --launch-profile cli-test
+dotnet run --project src/SpaceSpreadsheetEmulator.Coordinator --launch-profile cli-test
+dotnet run --project src/SpaceSpreadsheetEmulator.Gateway --launch-profile cli-test
+```
+
+The Worker CLI-test profile deliberately pins the promoted static-data artifact
+directory. Promote and review a new compatible artifact before updating that path;
+do not silently select the newest directory.
+
 When explicitly enabled for local client testing, Gateway also owns a loopback-only
 CONNECT proxy and HTTPS public-gateway compatibility endpoint. It creates or reuses
 the expected development CA, XMPP leaf, and public-gateway leaf; no certificate or

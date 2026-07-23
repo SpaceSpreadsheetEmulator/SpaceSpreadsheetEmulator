@@ -11,4 +11,11 @@ public interface IStaticDataStore : IAsyncDisposable
         StaticDataEntityKind kind,
         long id,
         CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<StaticDataRecord>> ListAsync(
+        StaticDataEntityKind kind,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<IReadOnlyList<StaticNpcAgent>> ListNpcAgentsAsync(
+        CancellationToken cancellationToken = default);
 }

@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using SpaceSpreadsheetEmulator.Protocol;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
+using SpaceSpreadsheetEmulator.Protocol.Compression;
 using SpaceSpreadsheetEmulator.Protocol.Crypto;
 using SpaceSpreadsheetEmulator.Protocol.Handshake;
 using SpaceSpreadsheetEmulator.Protocol.MachoNet;
@@ -16,6 +17,7 @@ namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
 {
     private static readonly ProtocolProfile Profile = ProtocolProfileCatalog.GetRequired(3396210);
+    private static readonly ZlibPayloadCodec Compression = new(Profile.Limits);
     private readonly NetworkStream stream = client.GetStream();
     private AesCbcFrameCipher? cipher;
     private long nextCallId = 100;
@@ -46,7 +48,60 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
         string? service,
         string method,
         PyTuple arguments,
-        string? boundObject = null)
+        string? boundObject = null,
+        PyDictionary? keywordArguments = null)
+    {
+        long callId = await WriteCallAsync(
+            service,
+            method,
+            arguments,
+            boundObject,
+            keywordArguments: keywordArguments);
+        return await ReadCallResponseAsync(callId);
+    }
+
+    public async Task<PyValue> CallCachedMethodAsync(
+        string service,
+        string method,
+        PyTuple arguments)
+    {
+        PyObject methodResult = Assert.IsType<PyObject>(await CallAsync(service, method, arguments));
+        PyTuple methodState = Assert.IsType<PyTuple>(methodResult.State);
+        PyObject cacheReference = Assert.IsType<PyObject>(methodState.Items[1]);
+        PyTuple referenceState = Assert.IsType<PyTuple>(cacheReference.State);
+        PyValue key = referenceState.Items[0];
+        PyValue nodeId = referenceState.Items[1];
+        PyValue version = referenceState.Items[2];
+
+        PyObject cachedObject = Assert.IsType<PyObject>(await CallAsync(
+            "objectCaching",
+            "GetCachableObject",
+            new PyTuple(new PyInteger(1), key, version, nodeId)));
+        PyTuple cachedState = Assert.IsType<PyTuple>(cachedObject.State);
+        Assert.Equal(7, cachedState.Items.Length);
+        Assert.IsType<PyNull>(cachedState.Items[1]);
+        Assert.Equal(1, Assert.IsType<PyInteger>(cachedState.Items[3]).Value);
+        PyBuffer payload = Assert.IsType<PyBuffer>(cachedState.Items[4]);
+        Assert.Equal(1, Assert.IsType<PyInteger>(cachedState.Items[5]).Value);
+        Assert.Equal(
+            BlueMarshalCodec.Encode(key, Profile),
+            BlueMarshalCodec.Encode(cachedState.Items[6], Profile));
+        DecodeResult<BinaryPayload> decompressed = Compression.Decompress(payload.Value.AsSpan());
+        Assert.True(decompressed.IsSuccess, decompressed.Error?.ToString());
+        DecodeResult<PyValue> decoded = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(decompressed.Value!.Bytes),
+            Profile);
+        Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
+        return decoded.Value!;
+    }
+
+    public async Task<long> WriteCallAsync(
+        string? service,
+        string method,
+        PyTuple arguments,
+        string? boundObject = null,
+        ImmutableArray<PyValue> extensions = default,
+        PyDictionary? keywordArguments = null)
     {
         byte[] callBody = BlueMarshalCodec.Encode(
             new PyTuple(
@@ -55,8 +110,23 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
                     : new PyBuffer(Encoding.UTF8.GetBytes(boundObject)),
                 new PyBuffer(Encoding.UTF8.GetBytes(method)),
                 arguments,
-                new PyDictionary()),
+                keywordArguments ?? new PyDictionary()),
             Profile);
+        return await WriteEncodedCallAsync(service, callBody, boundObject, extensions);
+    }
+
+    public async Task<long> WriteEncodedCallAsync(
+        string? service,
+        byte[] callBody,
+        string? boundObject = null,
+        ImmutableArray<PyValue> extensions = default)
+    {
+        ArgumentNullException.ThrowIfNull(callBody);
+        if (callBody.Length == 0)
+        {
+            throw new ArgumentException("An encoded call body is required.", nameof(callBody));
+        }
+
         long callId = Interlocked.Increment(ref nextCallId);
         var request = new MachoPacket(
             "carbon.common.script.net.machoNetPacket.CallReq",
@@ -65,9 +135,16 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
             service is null ? MachoAnyAddress.Instance : new MachoServiceAddress(service),
             null,
             new PyTuple(new PyTuple(new PyInteger(boundObject is null ? 0 : 1), new PySubstream(ImmutableArray.Create(callBody)))),
-            Enumerable.Repeat<PyValue>(PyNull.Instance, 9).ToImmutableArray());
+            extensions.IsDefault
+                ? Enumerable.Repeat<PyValue>(PyNull.Instance, 9).ToImmutableArray()
+                : extensions);
 
         await WritePacketAsync(request);
+        return callId;
+    }
+
+    public async Task<PyValue> ReadCallResponseAsync(long callId)
+    {
         MachoPacket response = await ReadPacketAsync();
         Assert.Equal(7, response.NumericType);
         Assert.Equal(callId, Assert.IsType<MachoClientAddress>(response.Destination).CallId);
@@ -173,8 +250,20 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
             payload = decrypted.Value!.Bytes;
         }
 
+        if (LooksLikeZlib(payload))
+        {
+            DecodeResult<BinaryPayload> decompressed = Compression.Decompress(payload);
+            Assert.True(decompressed.IsSuccess, decompressed.Error?.ToString());
+            payload = decompressed.Value!.Bytes;
+        }
+
         return payload;
     }
+
+    private static bool LooksLikeZlib(ReadOnlySpan<byte> payload)
+        => payload.Length >= 2
+            && (payload[0] & 0x0F) == 8
+            && ((payload[0] << 8) | payload[1]) % 31 == 0;
 
     private byte[] CreateFrame(byte[] payload, bool encrypted)
     {

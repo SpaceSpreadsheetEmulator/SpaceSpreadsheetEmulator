@@ -20,6 +20,16 @@ public sealed class UnavailableLoginBackend : ILoginBackend
         ReadOnlyMemory<byte> loginTicket,
         CancellationToken cancellationToken) => Task.FromResult<CharacterSelectionResponse?>(null);
 
+    public Task<StationCatalogResponse?> GetStationCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken) => Task.FromResult<StationCatalogResponse?>(null);
+
+    public Task<NpcAgentCatalogResponse?> GetNpcAgentCatalogAsync(
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CancellationToken cancellationToken) => Task.FromResult<NpcAgentCatalogResponse?>(null);
+
     public Task CloseSessionAsync(
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,

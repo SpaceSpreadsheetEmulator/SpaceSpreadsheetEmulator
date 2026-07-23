@@ -7,12 +7,22 @@ black-box observations. No reference implementation is a source or dependency.
 ## Stream envelope and shared encodings
 
 A marshal document begins with byte `7e`, followed by a little-endian `uint32`
-declaring the number of saved-value slots, then exactly one root value. Trailing
-bytes are malformed.
+declaring the number of saved-value slots, one root value, and a tail table with
+exactly that many little-endian `uint32` slot numbers. Bytes between the end of the
+root and the start of the tail table are malformed.
 
-Value byte bit `40` saves that value in the next one-based slot. Bits `00` through
-`3f` select the form. A saved reference contains a size-ex slot number. String-table
-references contain one byte and are one-based; index zero is reserved.
+The tail table is read in save-flag encounter order. Value byte bit `40` consumes
+the next table entry and saves that value in the entry's one-based slot; it does not
+implicitly use the next sequential slot. The observed table is a permutation of
+`1` through the declared count. Bits `00` through `3f` select the form. A saved
+reference contains a size-ex slot number and may resolve only a slot populated by
+an earlier value. String-table references contain one byte and are one-based; index
+zero is reserved.
+
+The root decoder is bounded at `document length - 4 * saved count`, so a malformed
+root length cannot consume the tail. A truncated table, duplicate, zero, or
+out-of-range slot, too many or too few save flags, or a reference to an unpopulated
+slot is malformed. A zero saved count has no tail table.
 
 Size-ex values use one byte for values `0` through `254`. Marker `ff` is followed by
 a little-endian `uint32`. Length and count limits are checked before allocation.

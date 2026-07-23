@@ -7,6 +7,6 @@ internal sealed class CoordinatorWebApplicationFactory : WebApplicationFactory<P
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment("UnitTest");
     }
 }

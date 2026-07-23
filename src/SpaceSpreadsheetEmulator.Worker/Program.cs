@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using SpaceSpreadsheetEmulator.Content.Characters;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
+using SpaceSpreadsheetEmulator.Gameplay.Stations;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
 using SpaceSpreadsheetEmulator.Persistence;
 using SpaceSpreadsheetEmulator.Persistence.Database;
@@ -12,6 +13,10 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile(
+    $"appsettings.{builder.Environment.EnvironmentName}.local.json",
+    optional: true,
+    reloadOnChange: builder.Environment.IsDevelopment());
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -78,6 +83,7 @@ if (loginOptions.Enabled)
             loginOptions.DevelopmentEnrollmentEnabled,
             loginOptions.MaximumAccounts));
     builder.Services.AddSingleton<ICharacterSelectionQuery, CharacterSelectionQuery>();
+    builder.Services.AddSingleton<IStationCatalogQuery, StationCatalogQuery>();
     builder.Services.AddSingleton<LoginTicketRegistry>();
 }
 

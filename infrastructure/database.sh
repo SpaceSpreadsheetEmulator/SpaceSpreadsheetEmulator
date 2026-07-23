@@ -36,14 +36,6 @@ compose() {
         "$@"
 }
 
-connection_string() {
-    printf 'Host=127.0.0.1;Port=%s;Database=%s;Username=%s;Password=%s' \
-        "${SSE_POSTGRES_PORT}" \
-        "${SSE_POSTGRES_DATABASE}" \
-        "${SSE_POSTGRES_USER}" \
-        "${SSE_POSTGRES_PASSWORD}"
-}
-
 wait_until_ready() {
     for _ in {1..60}; do
         if compose exec -T postgres \
@@ -64,10 +56,11 @@ migrate() {
     (
         cd "${repository_directory}"
         dotnet tool restore
-        SSE_GAME_DATABASE_CONNECTION="$(connection_string)" \
-            dotnet ef database update \
-                --project src/SpaceSpreadsheetEmulator.Persistence \
-                --startup-project src/SpaceSpreadsheetEmulator.Persistence
+        dotnet ef database update \
+            --project src/SpaceSpreadsheetEmulator.Persistence \
+            --startup-project src/SpaceSpreadsheetEmulator.Persistence \
+            -- \
+            --environment CliTest
     )
 }
 
@@ -88,10 +81,11 @@ case "${command}" in
         (
             cd "${repository_directory}"
             dotnet tool restore
-            SSE_GAME_DATABASE_CONNECTION="$(connection_string)" \
-                dotnet ef migrations list \
-                    --project src/SpaceSpreadsheetEmulator.Persistence \
-                    --startup-project src/SpaceSpreadsheetEmulator.Persistence
+            dotnet ef migrations list \
+                --project src/SpaceSpreadsheetEmulator.Persistence \
+                --startup-project src/SpaceSpreadsheetEmulator.Persistence \
+                -- \
+                --environment CliTest
         )
         ;;
     reset)
