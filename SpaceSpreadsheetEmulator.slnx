@@ -23,8 +23,10 @@
     <Project Path="tests/SpaceSpreadsheetEmulator.Protocol.Tests/SpaceSpreadsheetEmulator.Protocol.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Protocol.Tool.Tests/SpaceSpreadsheetEmulator.Protocol.Tool.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Worker.IntegrationTests/SpaceSpreadsheetEmulator.Worker.IntegrationTests.csproj" />
+    <Project Path="tests/SpaceSpreadsheetEmulator.CaptureInspector.Tests/SpaceSpreadsheetEmulator.CaptureInspector.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/SpaceSpreadsheetEmulator.CaptureInspector/SpaceSpreadsheetEmulator.CaptureInspector.csproj" />
     <Project Path="tools/SpaceSpreadsheetEmulator.StaticData.Tool/SpaceSpreadsheetEmulator.StaticData.Tool.csproj" />
     <Project Path="tools/SpaceSpreadsheetEmulator.Protocol.Tool/SpaceSpreadsheetEmulator.Protocol.Tool.csproj" />
   </Folder>

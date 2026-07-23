@@ -8,3 +8,5 @@ riderModule.iml
 /_local/static-data
 /_local/development-certificates
 /_local/e2e-evidence
+/artifacts/
+/tools/SpaceSpreadsheetEmulator.CaptureInspector/_local/

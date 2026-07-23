@@ -22,7 +22,8 @@ public class PackedRowCodecTests
             ImmutableArray.Create(
                 new PackedRowColumn("id", 3),
                 new PackedRowColumn("name", 130)),
-            ImmutableArray.Create<byte>(0, 42, 0, 0, 0),
+            // A one-byte literal run (42) followed by four compressed zero bytes.
+            ImmutableArray.Create<byte>(0xB7, 42),
             ImmutableArray.Create<PyValue>(new PyText("bob")));
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
 
@@ -31,6 +32,28 @@ public class PackedRowCodecTests
 
         Assert.True(decoded.IsSuccess);
         Assert.True(PyValueComparers.Semantic.Equals(row, decoded.Value));
+
+        PyPackedRow decodedRow = Assert.IsType<PyPackedRow>(decoded.Value);
+        DecodeResult<DecodedPackedRow> values = PackedRowValueCodec.Decode(decodedRow);
+        Assert.True(values.IsSuccess, values.Error?.ToString());
+        Assert.Collection(
+            values.Value!.Fields,
+            field =>
+            {
+                Assert.Equal("id", field.Column.Name);
+                Assert.Equal(42, Assert.IsType<PyInteger>(field.Value).Value);
+                Assert.All(field.WireRanges, range =>
+                {
+                    Assert.InRange(range.Offset, 0, encoded.Length - 1);
+                    Assert.InRange(range.End, 1, encoded.Length);
+                });
+            },
+            field =>
+            {
+                Assert.Equal("name", field.Column.Name);
+                Assert.Equal("bob", Assert.IsType<PyText>(field.Value).Value);
+                Assert.NotEmpty(field.WireRanges);
+            });
     }
 
     [Fact]
@@ -55,5 +78,23 @@ public class PackedRowCodecTests
             column => Assert.Equal(new PackedRowColumn("id", 3), column),
             column => Assert.Equal(new PackedRowColumn("name", 130), column));
         Assert.Equal(fixture, BlueMarshalCodec.Encode(decoded.Value!, profile, EncodingMode.PreserveWireForm));
+    }
+
+    [Fact]
+    public void PackedRowAllowsImplicitTrailingZeroBytes()
+    {
+        var row = new PyPackedRow(
+            PyNull.Instance,
+            ImmutableArray.Create(new PackedRowColumn("id", 3)),
+            // One literal byte followed by an omitted all-zero tail.
+            ImmutableArray.Create<byte>(0x07, 42),
+            []);
+
+        DecodeResult<DecodedPackedRow> decoded = PackedRowValueCodec.Decode(row);
+
+        Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
+        PackedRowFieldValue field = Assert.Single(decoded.Value!.Fields);
+        Assert.Equal(42, Assert.IsType<PyInteger>(field.Value).Value);
+        Assert.Single(field.WireRanges);
     }
 }

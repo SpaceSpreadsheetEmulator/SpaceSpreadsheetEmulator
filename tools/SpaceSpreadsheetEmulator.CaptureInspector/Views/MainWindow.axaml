@@ -1,0 +1,170 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dataGrid="clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls.DataGrid"
+        xmlns:inspectorControls="using:SpaceSpreadsheetEmulator.CaptureInspector.Controls"
+        xmlns:models="using:SpaceSpreadsheetEmulator.CaptureInspector.Models"
+        xmlns:vm="using:SpaceSpreadsheetEmulator.CaptureInspector.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="1500"
+        d:DesignHeight="950"
+        x:Class="SpaceSpreadsheetEmulator.CaptureInspector.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        MinWidth="1100"
+        MinHeight="720"
+        Title="EVE Capture Inspector">
+
+  <Design.DataContext>
+    <vm:MainWindowViewModel />
+  </Design.DataContext>
+
+  <Window.Resources>
+    <TreeDataTemplate x:Key="DecodeNodeTemplate"
+                      DataType="models:DecodeTreeNode"
+                      ItemsSource="{Binding Children}">
+      <StackPanel Orientation="Horizontal" Spacing="7">
+        <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+        <Border Background="#9A6B00"
+                CornerRadius="3"
+                IsVisible="{Binding HasBadge}"
+                Padding="5,1"
+                ToolTip.Tip="{Binding BadgeText}">
+          <TextBlock FontSize="10"
+                     FontWeight="SemiBold"
+                     Foreground="White"
+                     Text="{Binding BadgeText}" />
+        </Border>
+      </StackPanel>
+    </TreeDataTemplate>
+  </Window.Resources>
+
+  <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,2*,3*" RowSpacing="10">
+    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+      <StackPanel Spacing="2">
+        <TextBlock FontSize="20" FontWeight="SemiBold" Text="EVE Capture Inspector" />
+        <TextBlock Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                   Text="Offline inspection only; capture contents are never uploaded or logged." />
+      </StackPanel>
+      <Button Grid.Column="1" Click="OpenCaptureFile" Content="Open frames.jsonl" />
+      <Button Grid.Column="2" Click="OpenDataSources" Content="Data sources…" />
+    </Grid>
+
+    <StackPanel Grid.Row="1" Spacing="2">
+      <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+      <TextBlock Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                 Text="{Binding Summary}"
+                 TextWrapping="Wrap" />
+      <TextBlock Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                 Text="{Binding SourceStatus}"
+                 TextWrapping="Wrap" />
+      <TextBlock Foreground="Tomato"
+                 IsVisible="{Binding HasError}"
+                 Text="{Binding ErrorMessage}"
+                 TextWrapping="Wrap" />
+    </StackPanel>
+
+    <Grid Grid.Row="2" ColumnDefinitions="2*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+      <TextBox Watermark="Search packets"
+               Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+      <CheckBox Grid.Column="1" Content="IN" IsChecked="{Binding ShowInbound}" VerticalAlignment="Center" />
+      <CheckBox Grid.Column="2" Content="OUT" IsChecked="{Binding ShowOutbound}" VerticalAlignment="Center" />
+      <CheckBox Grid.Column="3" Content="Notes" IsChecked="{Binding ShowAnnotations}" VerticalAlignment="Center" />
+      <ComboBox Grid.Column="4" ItemsSource="{Binding MessageTypes}" SelectedItem="{Binding SelectedMessageType}" MinWidth="120" />
+      <ComboBox Grid.Column="5" ItemsSource="{Binding DecodeStatuses}" SelectedItem="{Binding SelectedDecodeStatus}" MinWidth="140" />
+    </Grid>
+
+    <Border Grid.Row="3"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            BorderThickness="1"
+            CornerRadius="4">
+      <dataGrid:DataGrid AutoGenerateColumns="False"
+                         CanUserSortColumns="True"
+                         GridLinesVisibility="Horizontal"
+                         IsReadOnly="True"
+                         ItemsSource="{Binding VisibleFrames}"
+                         SelectedItem="{Binding SelectedFrame}">
+        <dataGrid:DataGrid.Columns>
+          <dataGrid:DataGridTextColumn Header="#" Binding="{Binding FrameIndex}" SortMemberPath="FrameIndex" Width="65" />
+          <dataGrid:DataGridTextColumn Header="Direction" Binding="{Binding DirectionDisplay}" SortMemberPath="Direction" Width="90" />
+          <dataGrid:DataGridTextColumn Header="Start" Binding="{Binding RelativeTime}" SortMemberPath="RelativeMilliseconds" Width="90" />
+          <dataGrid:DataGridTextColumn Header="Span" Binding="{Binding DurationDisplay}" SortMemberPath="DurationMilliseconds" Width="85" />
+          <dataGrid:DataGridTextColumn Header="Chunk seq." Binding="{Binding SequenceDisplay}" SortMemberPath="StartSequence" Width="95" />
+          <dataGrid:DataGridTextColumn Header="Stream" Binding="{Binding StreamFrameIndex}" SortMemberPath="StreamFrameIndex" Width="75" />
+          <dataGrid:DataGridTextColumn Header="Bytes" Binding="{Binding WireSize}" SortMemberPath="WireSize" Width="75" />
+          <dataGrid:DataGridTextColumn Header="Type" Binding="{Binding MessageType}" SortMemberPath="MessageType" Width="115" />
+          <dataGrid:DataGridTextColumn Header="Service / method" Binding="{Binding ServiceMethod}" SortMemberPath="ServiceMethod" Width="*" />
+          <dataGrid:DataGridTextColumn Header="Call" Binding="{Binding CallIdDisplay}" SortMemberPath="CallId" Width="70" />
+          <dataGrid:DataGridTextColumn Header="Layer" Binding="{Binding CaptureLayerDisplay}" SortMemberPath="CaptureLayer" Width="145" />
+          <dataGrid:DataGridTextColumn Header="Status" Binding="{Binding DecodeStatus}" SortMemberPath="DecodeStatus" Width="125" />
+        </dataGrid:DataGrid.Columns>
+      </dataGrid:DataGrid>
+    </Border>
+
+    <Grid Grid.Row="4" ColumnDefinitions="3*,2*" ColumnSpacing="10">
+      <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+              BorderThickness="1"
+              CornerRadius="4"
+              Padding="6">
+        <TabControl SelectedIndex="{Binding SelectedDetailTabIndex}">
+          <TabItem Header="Packet decode">
+            <TreeView ItemsSource="{Binding DecodeTree}"
+                      ItemTemplate="{StaticResource DecodeNodeTemplate}"
+                      SelectedItem="{Binding SelectedDecodeNode}" />
+          </TabItem>
+          <TabItem Header="Reconstructed state">
+            <Grid RowDefinitions="Auto,*" RowSpacing="6">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           Text="{Binding ReconstructionStatus}"
+                           TextWrapping="Wrap" />
+                <Button Grid.Column="1"
+                        Click="GoToSelectedSource"
+                        Content="Go to source frame"
+                        IsEnabled="{Binding CanGoToSelectedSource}" />
+              </Grid>
+              <TreeView Grid.Row="1"
+                        ItemsSource="{Binding StateTree}"
+                        ItemTemplate="{StaticResource DecodeNodeTemplate}"
+                        SelectedItem="{Binding SelectedStateNode}" />
+            </Grid>
+          </TabItem>
+        </TabControl>
+      </Border>
+
+      <Border Grid.Column="1"
+              BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+              BorderThickness="1"
+              CornerRadius="4"
+              Padding="6">
+        <Grid RowDefinitions="Auto,*" RowSpacing="6">
+          <TextBlock Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                     Text="{Binding ByteStatus}"
+                     TextWrapping="Wrap" />
+          <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedByteTabIndex}">
+            <TabItem Header="Decoded bytes">
+              <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                <inspectorControls:HexViewer Bytes="{Binding DecodedBytes}"
+                                             FontFamily="Cascadia Mono,Consolas,monospace"
+                                             FontSize="13"
+                                             HorizontalAlignment="Left"
+                                             SelectedRanges="{Binding SelectedByteRanges}" />
+              </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Captured bytes" IsVisible="{Binding HasDifferentCapturedBytes}">
+              <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                <inspectorControls:HexViewer Bytes="{Binding CapturedBytes}"
+                                             FontFamily="Cascadia Mono,Consolas,monospace"
+                                             FontSize="13"
+                                             HorizontalAlignment="Left" />
+              </ScrollViewer>
+            </TabItem>
+          </TabControl>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

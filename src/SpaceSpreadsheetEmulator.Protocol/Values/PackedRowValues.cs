@@ -11,4 +11,14 @@ public sealed record PyPackedRow(
     PyValue Header,
     ImmutableArray<PackedRowColumn> Columns,
     ImmutableArray<byte> PackedData,
-    ImmutableArray<PyValue> VariableValues) : PyValue;
+    ImmutableArray<PyValue> VariableValues) : PyValue
+{
+    public long PackedDataByteOffset { get; init; } = -1;
+}
+
+public sealed record PackedRowFieldValue(
+    PackedRowColumn Column,
+    PyValue Value,
+    ImmutableArray<WireByteRange> WireRanges);
+
+public sealed record DecodedPackedRow(ImmutableArray<PackedRowFieldValue> Fields);

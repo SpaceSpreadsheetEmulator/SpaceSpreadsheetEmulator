@@ -53,7 +53,10 @@ internal ref partial struct BlueMarshalDecoder
 
         return value with
         {
-            WireForm = new PyWireForm(value.WireForm?.Opcode ?? 0, ImmutableArray.Create(input.ToArray())),
+            WireForm = new PyWireForm(value.WireForm?.Opcode ?? 0, ImmutableArray.Create(input.ToArray()))
+            {
+                ByteOffset = 0,
+            },
         };
     }
 
@@ -104,7 +107,10 @@ internal ref partial struct BlueMarshalDecoder
         long length = reader.Consumed - start;
         value = value with
         {
-            WireForm = new PyWireForm(encodedOpcode, ImmutableArray.Create(input.Slice(start, length).ToArray())),
+            WireForm = new PyWireForm(encodedOpcode, ImmutableArray.Create(input.Slice(start, length).ToArray()))
+            {
+                ByteOffset = start,
+            },
         };
 
         if (save)

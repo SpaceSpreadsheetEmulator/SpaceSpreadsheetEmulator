@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SpaceSpreadsheetEmulator.CaptureInspector.ViewModels"
+        x:Class="SpaceSpreadsheetEmulator.CaptureInspector.Views.DataSourcesWindow"
+        x:DataType="vm:DataSourcesViewModel"
+        Width="700"
+        MinHeight="500"
+        Title="Capture Inspector data sources">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+    <TextBlock TextWrapping="Wrap"
+               Text="Choose a public CCP JSONL archive to enable static ID names. Client exports are saved now but will not be parsed until a specific export adapter is added." />
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBox IsReadOnly="True" Text="{Binding CcpStaticDataArchivePath}" Watermark="CCP JSONL ZIP archive" />
+      <Button Grid.Column="1" Click="ChooseArchive" Content="Browse…" />
+    </Grid>
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBox IsReadOnly="True" Text="{Binding ClientExportLocation}" Watermark="Deferred client-export location" />
+      <Button Grid.Column="1" Click="ChooseClientExportLocation" Content="Browse…" />
+    </Grid>
+
+    <StackPanel Grid.Row="3" Spacing="6">
+      <TextBlock FontWeight="SemiBold" Text="Resolve these ID fields" />
+      <ItemsControl ItemsSource="{Binding IdentifierResolution}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <CheckBox Content="{Binding FieldName}" IsChecked="{Binding Enabled}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock Foreground="Tomato" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="4" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+      <Button Click="Cancel" Content="Cancel" />
+      <Button Click="Apply" Content="Apply" />
+    </StackPanel>
+  </Grid>
+</Window>
