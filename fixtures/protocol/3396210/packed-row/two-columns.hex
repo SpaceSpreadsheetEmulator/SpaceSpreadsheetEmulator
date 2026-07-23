@@ -1,0 +1,10 @@
+# DBRowDescriptor: id/type 3 and name/type 130; five packed bytes; external wstring "bob"
+7e 00 00 00 00
+2a
+22 2c 02 14 62 6c 75 65 2e 44 42 52 6f 77 44 65 73 63 72 69 70 74 6f 72
+25 2c
+2c 13 02 69 64 06 03
+2c 13 04 6e 61 6d 65 05 82 00
+2d 2d
+05 00 2a 00 00 00
+2e 03 62 6f 62

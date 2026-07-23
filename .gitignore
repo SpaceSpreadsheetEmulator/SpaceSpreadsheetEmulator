@@ -4,3 +4,7 @@ obj/
 riderModule.iml
 /.idea/
 /_ReSharper.Caches/
+/_local/protocol-captures
+/_local/static-data
+/_local/development-certificates
+/_local/e2e-evidence

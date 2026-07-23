@@ -1,0 +1,7 @@
+{
+  "codec": "blue", "success": true, "kind": "tuple",
+  "semantic": { "kind": "tuple", "items": [
+    { "kind": "text", "value": "x" },
+    { "kind": "savedValueReference", "index": 1, "value": { "kind": "text", "value": "x" } }
+  ] }
+}

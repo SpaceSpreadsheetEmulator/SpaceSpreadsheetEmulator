@@ -1,0 +1,8 @@
+{
+  "codec": "blue", "success": true, "kind": "checksummedStream",
+  "semantic": {
+    "kind": "checksummedStream",
+    "checksum": 891568578,
+    "value": { "kind": "buffer", "value": "616263" }
+  }
+}

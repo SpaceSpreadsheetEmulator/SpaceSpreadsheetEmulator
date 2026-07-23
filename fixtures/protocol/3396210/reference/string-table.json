@@ -1,0 +1,4 @@
+{
+  "codec": "blue", "success": true, "kind": "stringTableReference",
+  "semantic": { "kind": "stringTableReference", "index": 46, "value": "macho.CallReq" }
+}

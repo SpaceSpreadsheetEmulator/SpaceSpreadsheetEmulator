@@ -1,0 +1,52 @@
+{
+  "codec": "blue",
+  "success": true,
+  "kind": "packedRow",
+  "semantic": {
+    "kind": "packedRow",
+    "header": {
+      "kind": "extendedObject",
+      "variant": 1,
+      "header": {
+        "kind": "tuple",
+        "items": [
+          { "kind": "token", "value": "blue.DBRowDescriptor" },
+          {
+            "kind": "tuple",
+            "items": [
+              {
+                "kind": "tuple",
+                "items": [
+                  {
+                    "kind": "tuple",
+                    "items": [
+                      { "kind": "buffer", "value": "6964" },
+                      { "kind": "integer", "value": 3 }
+                    ]
+                  },
+                  {
+                    "kind": "tuple",
+                    "items": [
+                      { "kind": "buffer", "value": "6e616d65" },
+                      { "kind": "integer", "value": 130 }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "list": [],
+      "entries": []
+    },
+    "columns": [
+      { "name": "id", "encoding": 3 },
+      { "name": "name", "encoding": 130 }
+    ],
+    "data": "002a000000",
+    "variableValues": [
+      { "kind": "text", "value": "bob" }
+    ]
+  }
+}

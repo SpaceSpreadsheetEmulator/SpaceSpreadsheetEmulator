@@ -1,9 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
-
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Grpc.Core.Api" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Backplane.Contracts/SpaceSpreadsheetEmulator.Backplane.Contracts.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Content/SpaceSpreadsheetEmulator.Content.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Gameplay/SpaceSpreadsheetEmulator.Gameplay.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Simulation/SpaceSpreadsheetEmulator.Simulation.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.StaticData/SpaceSpreadsheetEmulator.StaticData.csproj" />
+  </ItemGroup>
 </Project>

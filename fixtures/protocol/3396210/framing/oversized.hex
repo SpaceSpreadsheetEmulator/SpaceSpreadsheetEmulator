@@ -1,0 +1,2 @@
+# 16 MiB + 1, which is rejected before payload allocation
+01 00 00 01

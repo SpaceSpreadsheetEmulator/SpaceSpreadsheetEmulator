@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Content/SpaceSpreadsheetEmulator.Content.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.StaticData/SpaceSpreadsheetEmulator.StaticData.csproj" />
+  </ItemGroup>
+</Project>

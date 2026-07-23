@@ -1,0 +1,2 @@
+# four-byte little-endian payload length followed by null
+01 00 00 00 00

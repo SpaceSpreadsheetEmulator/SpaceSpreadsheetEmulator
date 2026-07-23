@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package backplane.v1;
+option csharp_namespace = "SpaceSpreadsheetEmulator.Backplane.Contracts.V1";
+
+import "Protos/login_gameplay.proto";
+
+service SolarSystemGameplay {
+  rpc Undock (SolarSystemMutationRequest) returns (SolarSystemMutationResponse);
+  rpc Dock (SolarSystemMutationRequest) returns (SolarSystemMutationResponse);
+}
+
+message SolarSystemMutationRequest {
+  RequestContext context = 1;
+  bytes login_ticket = 2;
+  string owner_node_id = 3;
+  uint64 expected_epoch = 4;
+  int32 solar_system_id = 5;
+  int64 character_id = 6;
+  int64 ship_id = 7;
+  int32 station_id = 8;
+}
+
+message SolarSystemMutationResponse {
+  ServiceError error = 1;
+  string owner_node_id = 2;
+  uint64 epoch = 3;
+  int32 solar_system_id = 4;
+  int64 character_id = 5;
+  int64 ship_id = 6;
+  optional int32 station_id = 7;
+}

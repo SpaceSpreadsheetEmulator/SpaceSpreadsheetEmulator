@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package backplane.v1;
+option csharp_namespace = "SpaceSpreadsheetEmulator.Backplane.Contracts.V1";
+
+service LoginGameplay {
+  rpc GetCompatibility (CompatibilityRequest) returns (CompatibilityResponse);
+  rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse);
+  rpc GetCharacterSelection (CharacterSelectionRequest) returns (CharacterSelectionResponse);
+  rpc CloseSession (CloseSessionRequest) returns (CloseSessionResponse);
+}
+
+message RequestContext {
+  string gateway_id = 1;
+  uint64 gateway_session_id = 2;
+  string correlation_id = 3;
+  uint32 client_build = 4;
+}
+
+message CompatibilityRequest {}
+
+message CompatibilityResponse {
+  uint32 client_build = 1;
+  uint32 protocol_profile = 2;
+  uint32 sde_build = 3;
+  string source_sha256 = 4;
+  string artifact_sha256 = 5;
+}
+
+message AuthenticateRequest {
+  RequestContext context = 1;
+  string user_name = 2;
+  bytes credential_proof = 3;
+  string language_id = 4;
+  string country_code = 5;
+}
+
+message AuthenticateResponse {
+  bool success = 1;
+  ServiceError error = 2;
+  bytes login_ticket = 3;
+  int64 account_id = 4;
+  string user_name = 5;
+  string language_id = 6;
+  string country_code = 7;
+  int64 role = 8;
+}
+
+message CharacterSelectionRequest {
+  RequestContext context = 1;
+  bytes login_ticket = 2;
+}
+
+message CharacterSelectionResponse {
+  ServiceError error = 1;
+  int64 account_id = 2;
+  repeated CharacterSummary characters = 3;
+}
+
+message CharacterSummary {
+  int64 character_id = 1;
+  string name = 2;
+  int32 race_id = 3;
+  int32 bloodline_id = 4;
+  int32 ancestry_id = 5;
+  int32 character_type_id = 6;
+  int32 corporation_id = 7;
+  string corporation_name = 8;
+  int32 station_id = 9;
+  string station_name = 10;
+  int32 solar_system_id = 11;
+  string solar_system_name = 12;
+  int32 constellation_id = 13;
+  int32 region_id = 14;
+  int32 ship_type_id = 15;
+  string ship_name = 16;
+  string balance = 17;
+  int64 skill_points = 18;
+  int64 last_login_unix_milliseconds = 19;
+  int64 ship_id = 20;
+}
+
+message CloseSessionRequest {
+  RequestContext context = 1;
+  bytes login_ticket = 2;
+}
+
+message CloseSessionResponse {
+  bool closed = 1;
+}
+
+message ServiceError {
+  string code = 1;
+  string message = 2;
+}

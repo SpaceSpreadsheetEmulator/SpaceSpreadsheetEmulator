@@ -1,0 +1,7 @@
+{
+  "codec": "blue", "success": true, "kind": "dictionary",
+  "semantic": { "kind": "dictionary", "entries": [
+    { "key": { "kind": "text", "value": "k" }, "value": { "kind": "integer", "value": 1 } },
+    { "key": { "kind": "text", "value": "k" }, "value": { "kind": "integer", "value": 2 } }
+  ] }
+}

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>sseproto</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Protocol/SpaceSpreadsheetEmulator.Protocol.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../fixtures/protocol/**/*" Link="fixtures/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

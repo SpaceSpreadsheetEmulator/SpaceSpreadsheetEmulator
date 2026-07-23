@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package cluster.v1;
+option csharp_namespace = "SpaceSpreadsheetEmulator.Cluster.Contracts.V1";
+
+service ClusterDirectory {
+  rpc ResolvePartition (ResolvePartitionRequest) returns (ResolvePartitionResponse);
+}
+
+message ResolvePartitionRequest {
+  int32 kind = 1;
+  string key = 2;
+}
+
+message ResolvePartitionResponse {
+  bool found = 1;
+  string owner_node_id = 2;
+  uint64 epoch = 3;
+  string endpoint = 4;
+}

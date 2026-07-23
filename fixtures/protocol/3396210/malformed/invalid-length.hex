@@ -1,0 +1,2 @@
+# size-ex declares 16 MiB + 1 before allocating
+7e 00 00 00 00 13 ff 01 00 00 01

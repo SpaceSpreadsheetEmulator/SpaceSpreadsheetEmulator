@@ -1,0 +1,7 @@
+{
+  "codec": "blue", "success": true, "kind": "tuple",
+  "semantic": { "kind": "tuple", "items": [
+    { "kind": "boolean", "value": true },
+    { "kind": "integer", "value": -1 }
+  ] }
+}

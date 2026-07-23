@@ -1,0 +1,4 @@
+{
+  "codec": "blue", "success": true, "kind": "object",
+  "semantic": { "kind": "object", "type": { "kind": "token", "value": "T" }, "state": { "kind": "null" } }
+}

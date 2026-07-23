@@ -1,0 +1,7 @@
+{
+  "codec": "blue", "success": true, "kind": "list",
+  "semantic": { "kind": "list", "items": [
+    { "kind": "null" },
+    { "kind": "text", "value": "x" }
+  ] }
+}

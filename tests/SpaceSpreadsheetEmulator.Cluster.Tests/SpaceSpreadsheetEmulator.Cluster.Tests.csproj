@@ -18,4 +18,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Cluster/SpaceSpreadsheetEmulator.Cluster.csproj" />
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Simulation/SpaceSpreadsheetEmulator.Simulation.csproj" />
+  </ItemGroup>
+
 </Project>

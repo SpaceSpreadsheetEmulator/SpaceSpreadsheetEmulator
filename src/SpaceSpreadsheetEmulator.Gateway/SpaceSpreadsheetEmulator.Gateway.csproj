@@ -1,9 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
-
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Core.Api" />
+    <PackageReference Include="Grpc.Net.Client" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Backplane.Contracts/SpaceSpreadsheetEmulator.Backplane.Contracts.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Cluster.Contracts/SpaceSpreadsheetEmulator.Cluster.Contracts.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Protocol/SpaceSpreadsheetEmulator.Protocol.csproj" />
+  </ItemGroup>
 </Project>

@@ -1,0 +1,18 @@
+{
+  "codec": "blue",
+  "success": true,
+  "kind": "extendedObject",
+  "semantic": {
+    "kind": "extendedObject",
+    "variant": 1,
+    "header": {
+      "kind": "tuple",
+      "items": [
+        { "kind": "token", "value": "T" },
+        { "kind": "boolean", "value": true }
+      ]
+    },
+    "list": [],
+    "entries": []
+  }
+}

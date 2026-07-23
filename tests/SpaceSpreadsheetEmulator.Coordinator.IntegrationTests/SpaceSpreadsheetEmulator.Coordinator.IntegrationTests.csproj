@@ -18,4 +18,13 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Coordinator/SpaceSpreadsheetEmulator.Coordinator.csproj" />
+  </ItemGroup>
+
 </Project>
