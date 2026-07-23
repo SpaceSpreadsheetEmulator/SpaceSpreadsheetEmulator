@@ -3,6 +3,9 @@ using SpaceSpreadsheetEmulator.Simulation.Runtime;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
+/// <summary>
+/// Resolves station undock positions from the Worker's validated solar-system configuration.
+/// </summary>
 internal sealed class ConfiguredSolarSystemEntryPointResolver : ISolarSystemEntryPointResolver
 {
     private readonly IReadOnlyDictionary<(SolarSystemId SolarSystemId, int StationId), SolarVector3> entryPoints;

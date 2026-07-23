@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Protocol.Compression;
 
+/// <summary>
+/// Computes the CRC-32 checksum used by checksummed protocol streams.
+/// </summary>
 internal static class Crc32
 {
     public static uint Compute(ReadOnlySpan<byte> data)

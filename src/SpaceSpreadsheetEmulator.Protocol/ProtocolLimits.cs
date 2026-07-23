@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Protocol;
 
+/// <summary>
+/// Bounds frame sizes, decoded values, nesting, collections, and reference tables for untrusted input.
+/// </summary>
 public sealed record ProtocolLimits
 {
     public const int DefaultMaximumFrameBytes = 16 * 1024 * 1024;

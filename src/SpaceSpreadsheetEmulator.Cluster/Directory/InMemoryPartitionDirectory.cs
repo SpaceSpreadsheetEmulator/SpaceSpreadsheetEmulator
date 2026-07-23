@@ -2,6 +2,9 @@ using System.Collections.Concurrent;
 
 namespace SpaceSpreadsheetEmulator.Cluster.Directory;
 
+/// <summary>
+/// Stores validated partition assignments in memory for bootstrap and local deployments.
+/// </summary>
 public sealed class InMemoryPartitionDirectory : IPartitionDirectory
 {
     private readonly ConcurrentDictionary<PartitionKey, PartitionAssignment> assignments = new();

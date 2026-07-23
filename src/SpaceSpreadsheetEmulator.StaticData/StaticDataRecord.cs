@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.StaticData;
 
+/// <summary>
+/// Identifies the supported category of an imported static-data record.
+/// </summary>
 public enum StaticDataEntityKind
 {
     Race = 1,
@@ -14,6 +17,9 @@ public enum StaticDataEntityKind
     SolarSystem = 10,
 }
 
+/// <summary>
+/// Represents the common identifiers, name, and relationships imported for one static-data entity.
+/// </summary>
 public sealed record StaticDataRecord(
     StaticDataEntityKind Kind,
     long Id,

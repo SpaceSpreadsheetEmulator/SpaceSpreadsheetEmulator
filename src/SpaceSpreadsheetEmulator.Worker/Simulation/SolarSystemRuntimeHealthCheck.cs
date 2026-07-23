@@ -3,6 +3,9 @@ using SpaceSpreadsheetEmulator.Simulation.Runtime;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
+/// <summary>
+/// Reports unhealthy while any configured solar-system runtime is not running.
+/// </summary>
 internal sealed class SolarSystemRuntimeHealthCheck(ISolarSystemRuntimeRegistry registry) : IHealthCheck
 {
     public Task<HealthCheckResult> CheckHealthAsync(

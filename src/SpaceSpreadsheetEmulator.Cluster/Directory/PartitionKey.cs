@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Cluster.Directory;
 
+/// <summary>
+/// Provides the stable typed key used to address a cluster-owned gameplay partition.
+/// </summary>
 public readonly record struct PartitionKey
 {
     public const int MaximumValueLength = 128;

@@ -6,6 +6,9 @@ using Microsoft.Extensions.Options;
 
 namespace SpaceSpreadsheetEmulator.Gateway.LocalEdge;
 
+/// <summary>
+/// Proxies an explicit allowlist of local client HTTPS connections to the loopback compatibility endpoint.
+/// </summary>
 public sealed partial class LocalEdgeProxy(
     IOptions<LocalClientEdgeOptions> options,
     ILogger<LocalEdgeProxy> logger) : BackgroundService

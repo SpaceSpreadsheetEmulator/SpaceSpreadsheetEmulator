@@ -3,6 +3,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Worker;
 
+/// <summary>
+/// Validates Gateway identity, session, correlation, and client-build fields on Worker requests.
+/// </summary>
 internal static class BackplaneRequestValidator
 {
     public static bool TryValidateContext(

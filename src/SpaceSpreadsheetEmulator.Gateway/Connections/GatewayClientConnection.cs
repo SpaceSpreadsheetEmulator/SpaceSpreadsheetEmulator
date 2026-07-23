@@ -21,6 +21,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Connections;
 
+/// <summary>
+/// Owns one client's handshake, protocol session, RPC dispatch, and ordered outbound frame stream.
+/// </summary>
 internal sealed partial class GatewayClientConnection(
     TcpClient client,
     ulong gatewaySessionId,

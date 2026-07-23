@@ -7,6 +7,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.MachoNet;
 
+/// <summary>
+/// Represents a decoded MachoNet service or bound-object call request.
+/// </summary>
 public sealed record MachoRpcRequest(
     MachoPacket Packet,
     string? Service,
@@ -16,6 +19,9 @@ public sealed record MachoRpcRequest(
     PyTuple Arguments,
     PyDictionary KeywordArguments);
 
+/// <summary>
+/// Decodes MachoNet call envelopes and creates their matching response packets.
+/// </summary>
 public static class MachoRpcCodec
 {
     private const int CallRequestType = 6;

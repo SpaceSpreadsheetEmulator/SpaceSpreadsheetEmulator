@@ -6,6 +6,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Worker.Login;
 
+/// <summary>
+/// Issues bounded, expiring login tickets tied to one Gateway and client session.
+/// </summary>
 public sealed class LoginTicketRegistry(
     IOptions<WorkerLoginOptions> options,
     TimeProvider timeProvider)

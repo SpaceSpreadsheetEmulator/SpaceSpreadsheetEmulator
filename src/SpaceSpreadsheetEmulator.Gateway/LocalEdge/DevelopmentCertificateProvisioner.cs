@@ -4,12 +4,18 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace SpaceSpreadsheetEmulator.Gateway.LocalEdge;
 
+/// <summary>
+/// Holds the generated certificates and paths needed by the local client edge.
+/// </summary>
 public sealed record LocalEdgeCertificateSet(
     X509Certificate2 GatewayCertificate,
     string CaCertificatePath,
     string XmppCertificatePath,
     string GatewayCertificatePath);
 
+/// <summary>
+/// Creates and validates loopback-only development certificates for the owned local client environment.
+/// </summary>
 public static class DevelopmentCertificateProvisioner
 {
     public const string CaCertificateFileName = "xmpp-ca-cert.pem";

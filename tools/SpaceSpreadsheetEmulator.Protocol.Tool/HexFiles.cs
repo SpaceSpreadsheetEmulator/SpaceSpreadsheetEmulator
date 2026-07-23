@@ -2,6 +2,9 @@ using System.Globalization;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 
+/// <summary>
+/// Parses and formats the human-readable hexadecimal files used by protocol tooling.
+/// </summary>
 internal static class HexFiles
 {
     public static byte[] Read(string path) => Parse(File.ReadAllText(path));

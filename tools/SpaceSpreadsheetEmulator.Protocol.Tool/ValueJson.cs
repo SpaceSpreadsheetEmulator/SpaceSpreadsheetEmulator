@@ -7,6 +7,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 
+/// <summary>
+/// Maps protocol values to and from the tool's reviewable JSON representation.
+/// </summary>
 internal static class ValueJson
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };

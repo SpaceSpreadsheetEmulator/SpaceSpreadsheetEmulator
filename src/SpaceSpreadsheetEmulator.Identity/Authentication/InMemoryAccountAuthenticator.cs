@@ -4,6 +4,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Identity.Authentication;
 
+/// <summary>
+/// Authenticates a bounded set of local accounts and optionally enrolls them on first login.
+/// </summary>
 public sealed class InMemoryAccountAuthenticator(bool enrollmentEnabled, int maximumAccounts = 64) : IAccountAuthenticator, IDisposable
 {
     private const int MaximumUserNameLength = 100;

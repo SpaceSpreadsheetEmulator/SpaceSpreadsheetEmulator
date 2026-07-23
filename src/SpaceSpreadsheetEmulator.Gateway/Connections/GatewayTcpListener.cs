@@ -7,6 +7,9 @@ using SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Connections;
 
+/// <summary>
+/// Accepts bounded client TCP connections and gives each connection an isolated protocol session.
+/// </summary>
 public sealed partial class GatewayTcpListener(
     IOptions<GatewayConnectionOptions> options,
     GatewayConnectionMetrics metrics,

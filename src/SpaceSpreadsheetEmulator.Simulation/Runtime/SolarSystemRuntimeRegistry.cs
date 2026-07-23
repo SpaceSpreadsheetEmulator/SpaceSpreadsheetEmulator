@@ -2,6 +2,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
+/// <summary>
+/// Indexes the distinct solar-system runtimes configured on a Worker.
+/// </summary>
 public sealed class SolarSystemRuntimeRegistry : ISolarSystemRuntimeRegistry
 {
     private readonly IReadOnlyDictionary<SolarSystemId, ISolarSystemRuntime> runtimes;

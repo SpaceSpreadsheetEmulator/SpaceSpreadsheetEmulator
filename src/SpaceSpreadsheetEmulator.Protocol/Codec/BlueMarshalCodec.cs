@@ -4,6 +4,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Codec;
 
+/// <summary>
+/// Encodes and decodes the legacy Blue marshal value stream for a pinned protocol profile.
+/// </summary>
 public static class BlueMarshalCodec
 {
     public static DecodeResult<PyValue> Decode(

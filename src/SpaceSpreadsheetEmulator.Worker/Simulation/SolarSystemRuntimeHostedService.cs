@@ -2,6 +2,9 @@ using SpaceSpreadsheetEmulator.Simulation.Runtime;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
+/// <summary>
+/// Starts and supervises every solar-system runtime assigned to the Worker process.
+/// </summary>
 internal sealed partial class SolarSystemRuntimeHostedService(
     ISolarSystemRuntimeRegistry registry,
     ILogger<SolarSystemRuntimeHostedService> logger) : BackgroundService

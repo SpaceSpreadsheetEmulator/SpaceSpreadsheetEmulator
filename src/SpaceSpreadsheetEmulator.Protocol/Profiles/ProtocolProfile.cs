@@ -2,6 +2,9 @@ using System.Collections.Immutable;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Profiles;
 
+/// <summary>
+/// Groups the string table, safety limits, and handshake constants for one supported client build.
+/// </summary>
 public sealed record ProtocolProfile(
     int Build,
     ImmutableArray<string> StringTable,
@@ -20,6 +23,9 @@ public sealed record ProtocolProfile(
     }
 }
 
+/// <summary>
+/// Defines the build-specific values exchanged while negotiating a client connection.
+/// </summary>
 public sealed record HandshakeProfile(
     int EveBirthday,
     int MachoVersion,

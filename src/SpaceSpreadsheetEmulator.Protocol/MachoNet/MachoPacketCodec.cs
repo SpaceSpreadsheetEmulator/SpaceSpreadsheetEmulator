@@ -7,6 +7,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.MachoNet;
 
+/// <summary>
+/// Maps complete MachoNet packet envelopes to and from Blue marshal byte streams.
+/// </summary>
 public static class MachoPacketCodec
 {
     private const string AddressTypeName = "carbon.common.script.net.machoNetAddress.MachoAddress";

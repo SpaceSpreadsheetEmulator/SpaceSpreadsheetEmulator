@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Worker.Login;
 
+/// <summary>
+/// Configures Worker login capacity, development enrollment, ticket lifetime, and static data.
+/// </summary>
 public sealed class WorkerLoginOptions
 {
     public bool Enabled { get; init; }

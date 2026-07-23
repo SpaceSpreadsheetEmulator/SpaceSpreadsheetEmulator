@@ -3,6 +3,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
+/// <summary>
+/// Maps known character and corporation owners to build-3396210 lookup response shapes.
+/// </summary>
 internal static class Build3396210OwnerMapper
 {
     private static readonly Build3396210RowField[] CorporationTickerFields =

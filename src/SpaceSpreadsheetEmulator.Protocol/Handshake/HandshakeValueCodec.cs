@@ -7,6 +7,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Handshake;
 
+/// <summary>
+/// Maps build-specific handshake messages between typed models and protocol values.
+/// </summary>
 public static class HandshakeValueCodec
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);

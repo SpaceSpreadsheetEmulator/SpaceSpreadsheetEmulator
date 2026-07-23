@@ -1,11 +1,17 @@
 namespace SpaceSpreadsheetEmulator.Protocol;
 
+/// <summary>
+/// Describes where and why protocol input could not be decoded or validated.
+/// </summary>
 public sealed record ProtocolError(
     string Code,
     long ByteOffset,
     string ValuePath,
     string Message);
 
+/// <summary>
+/// Defines stable machine-readable codes for protocol decoding and compatibility failures.
+/// </summary>
 public static class ProtocolErrorCodes
 {
     public const string Incomplete = "protocol.incomplete";

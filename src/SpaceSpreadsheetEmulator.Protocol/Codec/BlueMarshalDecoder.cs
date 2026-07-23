@@ -8,6 +8,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Codec;
 
+/// <summary>
+/// Performs bounded, stateful decoding of one Blue marshal document.
+/// </summary>
 internal ref partial struct BlueMarshalDecoder
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);

@@ -3,6 +3,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
+/// <summary>
+/// Serializes commands and ticks through a bounded queue for one solar-system partition.
+/// </summary>
 public sealed class SolarSystemRuntime : ISolarSystemRuntime
 {
     private readonly Channel<RuntimeCommand> commands;

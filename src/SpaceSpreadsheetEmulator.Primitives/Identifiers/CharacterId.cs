@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
+/// <summary>
+/// Identifies a player character across gameplay and persistence boundaries.
+/// </summary>
 public readonly record struct CharacterId
 {
     public CharacterId(long value)

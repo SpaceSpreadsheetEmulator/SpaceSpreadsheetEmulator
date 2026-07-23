@@ -3,6 +3,9 @@ using System.Buffers.Binary;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Framing;
 
+/// <summary>
+/// Writes bounded payloads using the client's little-endian length-prefixed framing.
+/// </summary>
 public sealed class FrameWriter(int maximumFrameBytes = ProtocolLimits.DefaultMaximumFrameBytes)
 {
     public int MaximumFrameBytes { get; } = maximumFrameBytes > 0

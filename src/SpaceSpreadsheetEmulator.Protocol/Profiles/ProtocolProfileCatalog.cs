@@ -4,6 +4,9 @@ using System.Reflection;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Profiles;
 
+/// <summary>
+/// Resolves explicitly supported client builds to their pinned protocol profiles.
+/// </summary>
 public static class ProtocolProfileCatalog
 {
     public const int SupportedBuild = 3_396_210;

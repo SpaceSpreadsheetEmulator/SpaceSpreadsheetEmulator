@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
+/// <summary>
+/// Produces simulation ticks at a fixed period using an injected time provider.
+/// </summary>
 public sealed class PeriodicSimulationTickSource : ISimulationTickSource
 {
     private readonly PeriodicTimer timer;

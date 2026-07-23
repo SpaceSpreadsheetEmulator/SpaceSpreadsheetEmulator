@@ -6,6 +6,9 @@ using Microsoft.Data.Sqlite;
 
 namespace SpaceSpreadsheetEmulator.StaticData;
 
+/// <summary>
+/// Validates an official SDE archive and promotes it into an immutable, content-addressed SQLite artifact.
+/// </summary>
 public sealed class StaticDataPromoter
 {
     public const string DatabaseFileName = "static-data.sqlite";

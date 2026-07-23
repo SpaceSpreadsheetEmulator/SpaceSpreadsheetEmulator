@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Gateway.Connections;
 
+/// <summary>
+/// Configures the Gateway TCP endpoint, soft connection limit, and per-client outbound queue.
+/// </summary>
 public sealed class GatewayConnectionOptions
 {
     public bool Enabled { get; init; }

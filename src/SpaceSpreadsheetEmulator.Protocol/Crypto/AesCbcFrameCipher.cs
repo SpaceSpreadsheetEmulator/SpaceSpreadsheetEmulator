@@ -2,6 +2,9 @@ using System.Security.Cryptography;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Crypto;
 
+/// <summary>
+/// Encrypts and decrypts ordered frame streams with independent stateful AES-CBC directions.
+/// </summary>
 public sealed class AesCbcFrameCipher : IDisposable
 {
     public const int KeyLength = 32;
@@ -87,4 +90,7 @@ public sealed class AesCbcFrameCipher : IDisposable
         => DecodeResult<CipherPayload>.Failure(new ProtocolError(code, 0, "$crypto", message));
 }
 
+/// <summary>
+/// Wraps successfully decrypted frame bytes for use with structured decode results.
+/// </summary>
 public sealed record CipherPayload(byte[] Bytes);

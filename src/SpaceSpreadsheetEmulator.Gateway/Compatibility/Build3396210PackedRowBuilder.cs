@@ -4,6 +4,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
+/// <summary>
+/// Builds build-3396210 row descriptors and packed-row payloads from explicit field definitions.
+/// </summary>
 internal static class Build3396210PackedRowBuilder
 {
     public static PyExtendedObject CreateRowset(
@@ -253,4 +256,7 @@ internal static class Build3396210PackedRowBuilder
     private sealed record IndexedColumn(int Index, PackedRowColumn Column, int Width);
 }
 
+/// <summary>
+/// Names one build-3396210 row field and its observed packed encoding.
+/// </summary>
 internal sealed record Build3396210RowField(string Name, ushort Encoding);

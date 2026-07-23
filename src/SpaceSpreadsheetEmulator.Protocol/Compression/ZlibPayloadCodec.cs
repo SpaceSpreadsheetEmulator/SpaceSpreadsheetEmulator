@@ -2,6 +2,9 @@ using System.IO.Compression;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Compression;
 
+/// <summary>
+/// Compresses and safely decompresses bounded zlib protocol payloads.
+/// </summary>
 public sealed class ZlibPayloadCodec(ProtocolLimits? limits = null)
 {
     private readonly ProtocolLimits limits = limits ?? new ProtocolLimits();
@@ -74,4 +77,7 @@ public sealed class ZlibPayloadCodec(ProtocolLimits? limits = null)
             message));
 }
 
+/// <summary>
+/// Wraps a successfully decoded binary payload for use with structured decode results.
+/// </summary>
 public sealed record BinaryPayload(byte[] Bytes);

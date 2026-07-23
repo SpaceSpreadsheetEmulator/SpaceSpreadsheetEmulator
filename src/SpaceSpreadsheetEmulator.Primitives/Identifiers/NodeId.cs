@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
+/// <summary>
+/// Identifies a Gateway, Coordinator, Worker, or other node participating in the cluster.
+/// </summary>
 public readonly record struct NodeId
 {
     public const int MaximumLength = 128;

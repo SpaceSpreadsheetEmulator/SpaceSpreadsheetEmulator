@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Protocol.Codec;
 
+/// <summary>
+/// Defines the observed type opcodes and flags used by the Blue marshal wire format.
+/// </summary>
 internal static class BlueOpcodes
 {
     public const byte TypeMask = 0x3F;

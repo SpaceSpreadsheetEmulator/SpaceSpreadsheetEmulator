@@ -7,6 +7,9 @@ using SpaceSpreadsheetEmulator.Protocol.Handshake;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
+/// <summary>
+/// Adapts Gateway login operations to the Worker's versioned login gRPC contract.
+/// </summary>
 public sealed class GrpcLoginBackend : ILoginBackend, IDisposable
 {
     private readonly GatewayBackplaneOptions options;

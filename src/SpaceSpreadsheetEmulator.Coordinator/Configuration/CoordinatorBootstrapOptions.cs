@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Coordinator.Configuration;
 
+/// <summary>
+/// Configures the Coordinator's explicit local-development partition assignments.
+/// </summary>
 internal sealed class CoordinatorBootstrapOptions
 {
     public bool Enabled { get; init; }
@@ -18,6 +21,9 @@ internal sealed class CoordinatorBootstrapOptions
                     == Assignments.Count);
 }
 
+/// <summary>
+/// Describes one solar-system owner, epoch, and endpoint seeded at Coordinator startup.
+/// </summary>
 internal sealed class CoordinatorBootstrapAssignmentOptions
 {
     public int SolarSystemId { get; init; }

@@ -10,6 +10,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
+/// <summary>
+/// Loads a bounded, hash-verified allowlist of local startup responses for compatibility testing.
+/// </summary>
 internal sealed class CapturedStartupReplay
 {
     private const string ManifestFileName = "manifest.json";
@@ -136,6 +139,9 @@ internal sealed class CapturedStartupReplay
         string? Match = null);
 }
 
+/// <summary>
+/// Consumes replay responses in manifest order while matching the current RPC arguments.
+/// </summary>
 internal sealed class CapturedStartupReplayCursor(CapturedStartupReplay? replay)
 {
     private readonly Dictionary<string, int> nextIndexes = new(StringComparer.Ordinal);
@@ -227,4 +233,7 @@ internal sealed class CapturedStartupReplayCursor(CapturedStartupReplay? replay)
         };
 }
 
+/// <summary>
+/// Associates one allowlisted startup route and optional argument match with its decoded response.
+/// </summary>
 internal sealed record CapturedReplayResponse(string Route, string? Match, PyValue Value);

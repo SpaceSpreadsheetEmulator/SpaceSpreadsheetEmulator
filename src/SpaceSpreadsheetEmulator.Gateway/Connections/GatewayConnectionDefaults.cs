@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Gateway.Connections;
 
+/// <summary>
+/// Defines conservative operational defaults for a Gateway client listener.
+/// </summary>
 public static class GatewayConnectionDefaults
 {
     /// <summary>

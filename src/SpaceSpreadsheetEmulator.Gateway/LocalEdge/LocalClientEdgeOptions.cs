@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Gateway.LocalEdge;
 
+/// <summary>
+/// Configures the bounded loopback proxy and development certificate locations used by a local client.
+/// </summary>
 public sealed class LocalClientEdgeOptions
 {
     public bool Enabled { get; init; }

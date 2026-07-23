@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
+/// <summary>
+/// Configures the Worker's owned solar systems, fencing epochs, and command-queue capacity.
+/// </summary>
 internal sealed class WorkerSolarSystemOptions
 {
     public bool Enabled { get; init; }
@@ -27,6 +30,9 @@ internal sealed class WorkerSolarSystemOptions
                     == assignment.EntryPoints.Count));
 }
 
+/// <summary>
+/// Describes one solar-system partition assigned to the Worker at a specific epoch.
+/// </summary>
 internal sealed class WorkerSolarSystemAssignmentOptions
 {
     public int SolarSystemId { get; init; }
@@ -36,6 +42,9 @@ internal sealed class WorkerSolarSystemAssignmentOptions
     public List<WorkerStationEntryPointOptions> EntryPoints { get; init; } = [];
 }
 
+/// <summary>
+/// Defines the finite in-space position associated with one station's undock path.
+/// </summary>
 internal sealed class WorkerStationEntryPointOptions
 {
     public int StationId { get; init; }

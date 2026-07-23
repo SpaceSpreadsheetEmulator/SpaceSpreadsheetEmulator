@@ -9,6 +9,9 @@ using GameplayCharacterSummary = SpaceSpreadsheetEmulator.Gameplay.Characters.Ch
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
+/// <summary>
+/// Resolves a backplane request to its authenticated character and correctly fenced local runtime.
+/// </summary>
 internal sealed class SolarSystemRequestResolver(
     LoginTicketRegistry tickets,
     ICharacterSelectionQuery characterSelection,
@@ -74,6 +77,9 @@ internal sealed class SolarSystemRequestResolver(
     }
 }
 
+/// <summary>
+/// Contains either the validated runtime and character context or a service-level rejection.
+/// </summary>
 internal sealed record SolarSystemRequestResolution(
     ISolarSystemRuntime? Runtime,
     GameplayCharacterSummary? Character,

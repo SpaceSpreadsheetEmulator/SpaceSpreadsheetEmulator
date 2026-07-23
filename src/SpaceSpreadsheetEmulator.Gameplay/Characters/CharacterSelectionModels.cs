@@ -3,10 +3,16 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Gameplay.Characters;
 
+/// <summary>
+/// Contains the characters available for an authenticated account to select.
+/// </summary>
 public sealed record CharacterSelection(
     AccountId AccountId,
     IReadOnlyList<CharacterSummary> Characters);
 
+/// <summary>
+/// Describes the character, location, ship, and account-facing values shown at character selection.
+/// </summary>
 public sealed record CharacterSummary(
     CharacterId CharacterId,
     string Name,
@@ -29,6 +35,9 @@ public sealed record CharacterSummary(
     long SkillPoints,
     DateTimeOffset LastLoginAt);
 
+/// <summary>
+/// Loads the character-selection view for an authenticated account.
+/// </summary>
 public interface ICharacterSelectionQuery
 {
     ValueTask<CharacterSelection> ExecuteAsync(

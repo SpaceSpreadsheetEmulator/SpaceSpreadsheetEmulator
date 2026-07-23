@@ -2,6 +2,9 @@ using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
+/// <summary>
+/// Rejects solar-system operations when the Gateway is configured without a reachable gameplay backend.
+/// </summary>
 public sealed class UnavailableSolarSystemBackend : ISolarSystemBackend
 {
     public Task<SolarSystemRoute?> ResolveAsync(int solarSystemId, CancellationToken cancellationToken)

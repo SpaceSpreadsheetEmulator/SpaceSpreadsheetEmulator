@@ -5,6 +5,9 @@ using SpaceSpreadsheetEmulator.StaticData;
 
 namespace SpaceSpreadsheetEmulator.Gameplay.Characters;
 
+/// <summary>
+/// Builds the current starter character-selection view from validated static data.
+/// </summary>
 public sealed class CharacterSelectionQuery(
     IStaticDataStore staticData,
     StarterCharacterTemplate template,

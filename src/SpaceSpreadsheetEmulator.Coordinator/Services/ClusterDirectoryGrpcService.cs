@@ -4,6 +4,9 @@ using SpaceSpreadsheetEmulator.Cluster.Directory;
 
 namespace SpaceSpreadsheetEmulator.Coordinator.Services;
 
+/// <summary>
+/// Exposes low-volume partition ownership resolution through the versioned cluster gRPC contract.
+/// </summary>
 public sealed class ClusterDirectoryGrpcService(IPartitionDirectory directory)
     : ClusterDirectory.ClusterDirectoryBase
 {

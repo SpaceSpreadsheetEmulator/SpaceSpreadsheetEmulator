@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
+/// <summary>
+/// Configures the Gateway's versioned gRPC connections to Worker and Coordinator backplanes.
+/// </summary>
 public sealed class GatewayBackplaneOptions
 {
     public bool Enabled { get; init; }

@@ -5,6 +5,7 @@ option csharp_namespace = "SpaceSpreadsheetEmulator.Backplane.Contracts.V1";
 
 import "Protos/login_gameplay.proto";
 
+// Provides fenced solar-system gameplay operations to Gateways.
 service SolarSystemGameplay {
   rpc Undock (SolarSystemMutationRequest) returns (SolarSystemMutationResponse);
   rpc Dock (SolarSystemMutationRequest) returns (SolarSystemMutationResponse);
@@ -12,6 +13,7 @@ service SolarSystemGameplay {
   rpc GetShipState (SolarShipStateRequest) returns (SolarShipStateResponse);
 }
 
+// Requests a dock or undock transition against an explicitly routed partition epoch.
 message SolarSystemMutationRequest {
   RequestContext context = 1;
   bytes login_ticket = 2;
@@ -23,6 +25,7 @@ message SolarSystemMutationRequest {
   int32 station_id = 8;
 }
 
+// Returns the authoritative character location produced by a solar-system transition.
 message SolarSystemMutationResponse {
   ServiceError error = 1;
   string owner_node_id = 2;
@@ -34,6 +37,7 @@ message SolarSystemMutationResponse {
   SolarShipState ship_state = 8;
 }
 
+// Requests an authoritative ship velocity change against a fenced partition.
 message SolarSystemVelocityRequest {
   RequestContext context = 1;
   bytes login_ticket = 2;
@@ -45,6 +49,7 @@ message SolarSystemVelocityRequest {
   SolarVector3 velocity = 8;
 }
 
+// Requests the current authoritative state of a ship in a fenced partition.
 message SolarShipStateRequest {
   RequestContext context = 1;
   bytes login_ticket = 2;
@@ -55,11 +60,13 @@ message SolarShipStateRequest {
   int64 ship_id = 7;
 }
 
+// Contains an authoritative ship state or a service-level rejection.
 message SolarShipStateResponse {
   ServiceError error = 1;
   SolarShipState ship_state = 2;
 }
 
+// Captures the authoritative position and velocity of a ship at one simulation tick.
 message SolarShipState {
   int64 character_id = 1;
   int64 ship_id = 2;
@@ -70,6 +77,7 @@ message SolarShipState {
   SolarVector3 velocity = 7;
 }
 
+// Represents a finite three-dimensional protocol vector.
 message SolarVector3 {
   double x = 1;
   double y = 2;

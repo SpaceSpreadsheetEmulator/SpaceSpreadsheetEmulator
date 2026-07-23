@@ -9,6 +9,9 @@ using SpaceSpreadsheetEmulator.StaticData;
 
 namespace SpaceSpreadsheetEmulator.Worker.Login;
 
+/// <summary>
+/// Implements authentication and character-selection operations on the Worker data plane.
+/// </summary>
 public sealed partial class LoginGameplayGrpcService(
     IStaticDataStore staticData,
     IAccountAuthenticator authenticator,

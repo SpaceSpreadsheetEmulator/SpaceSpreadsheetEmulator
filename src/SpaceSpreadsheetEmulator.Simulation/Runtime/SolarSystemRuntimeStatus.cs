@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
+/// <summary>
+/// Describes the lifecycle state of a solar-system command loop.
+/// </summary>
 public enum SolarSystemRuntimeStatus
 {
     Created = 0,

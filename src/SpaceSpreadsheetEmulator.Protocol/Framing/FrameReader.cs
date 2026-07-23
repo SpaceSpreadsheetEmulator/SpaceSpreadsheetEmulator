@@ -2,6 +2,9 @@ using System.Buffers;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Framing;
 
+/// <summary>
+/// Incrementally reads bounded little-endian length-prefixed frames from a byte sequence.
+/// </summary>
 public sealed class FrameReader(int maximumFrameBytes = ProtocolLimits.DefaultMaximumFrameBytes)
 {
     public int MaximumFrameBytes { get; } = maximumFrameBytes > 0

@@ -5,6 +5,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
+/// <summary>
+/// Maps neutral character-selection data to the rowsets expected by client build 3396210.
+/// </summary>
 internal static class Build3396210CharacterSelectionMapper
 {
     private static readonly Build3396210RowField[] AccountFields =

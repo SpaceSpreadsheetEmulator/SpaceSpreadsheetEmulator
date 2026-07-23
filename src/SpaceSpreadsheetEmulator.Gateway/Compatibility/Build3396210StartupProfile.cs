@@ -185,4 +185,7 @@ internal sealed class Build3396210StartupProfile
     private static StartupResponse Response(PyValue value) => new(value);
 }
 
+/// <summary>
+/// Wraps a build-specific startup RPC result selected by the compatibility profile.
+/// </summary>
 internal sealed record StartupResponse(PyValue Value);

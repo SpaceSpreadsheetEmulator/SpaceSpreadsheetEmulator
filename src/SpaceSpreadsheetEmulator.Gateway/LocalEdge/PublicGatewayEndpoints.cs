@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Gateway.LocalEdge;
 
+/// <summary>
+/// Maps the minimal bounded public-gateway endpoints required by the local client startup path.
+/// </summary>
 internal static class PublicGatewayEndpoints
 {
     private const int MaximumRequestBytes = 1024 * 1024;

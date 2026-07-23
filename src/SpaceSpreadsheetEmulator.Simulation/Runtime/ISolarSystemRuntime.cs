@@ -2,6 +2,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
+/// <summary>
+/// Defines the single-writer command boundary for one owned solar-system simulation.
+/// </summary>
 public interface ISolarSystemRuntime
 {
     SolarSystemRuntimeContext Context { get; }

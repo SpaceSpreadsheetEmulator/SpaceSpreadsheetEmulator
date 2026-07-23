@@ -2,6 +2,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
+/// <summary>
+/// Owns the mutable ship state confined to a single solar-system command loop.
+/// </summary>
 internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
 {
     private readonly Dictionary<CharacterId, SolarShipState> shipsByCharacter = [];

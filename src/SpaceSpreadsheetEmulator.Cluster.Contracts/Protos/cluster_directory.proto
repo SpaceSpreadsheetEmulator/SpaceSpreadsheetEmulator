@@ -3,15 +3,18 @@ syntax = "proto3";
 package cluster.v1;
 option csharp_namespace = "SpaceSpreadsheetEmulator.Cluster.Contracts.V1";
 
+// Provides low-volume logical partition ownership resolution.
 service ClusterDirectory {
   rpc ResolvePartition (ResolvePartitionRequest) returns (ResolvePartitionResponse);
 }
 
+// Identifies the kind and stable key of a logical partition to resolve.
 message ResolvePartitionRequest {
   int32 kind = 1;
   string key = 2;
 }
 
+// Describes the current owner, fencing epoch, and endpoint of a resolved partition.
 message ResolvePartitionResponse {
   bool found = 1;
   string owner_node_id = 2;

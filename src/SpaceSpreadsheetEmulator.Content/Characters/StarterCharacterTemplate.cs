@@ -2,6 +2,9 @@ using SpaceSpreadsheetEmulator.StaticData;
 
 namespace SpaceSpreadsheetEmulator.Content.Characters;
 
+/// <summary>
+/// Defines the static-data-backed attributes used to create the initial playable character.
+/// </summary>
 public sealed record StarterCharacterTemplate(
     string Name,
     int RaceId,

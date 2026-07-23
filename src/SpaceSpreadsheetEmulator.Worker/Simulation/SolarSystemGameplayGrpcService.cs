@@ -9,6 +9,9 @@ using RuntimeVector3 = SpaceSpreadsheetEmulator.Simulation.Runtime.SolarVector3;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
+/// <summary>
+/// Validates and dispatches fenced solar-system gameplay requests to local single-writer runtimes.
+/// </summary>
 internal sealed class SolarSystemGameplayGrpcService(
     SolarSystemRequestResolver requestResolver,
     ISolarSystemEntryPointResolver entryPoints) : SolarSystemGameplay.SolarSystemGameplayBase

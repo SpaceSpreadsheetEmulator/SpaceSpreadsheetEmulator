@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Gateway.Connections;
 
+/// <summary>
+/// Tracks the current and rejected client connection counts for Gateway health reporting.
+/// </summary>
 public sealed class GatewayConnectionMetrics
 {
     private int activeConnections;

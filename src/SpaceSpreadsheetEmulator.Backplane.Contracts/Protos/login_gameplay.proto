@@ -3,6 +3,7 @@ syntax = "proto3";
 package backplane.v1;
 option csharp_namespace = "SpaceSpreadsheetEmulator.Backplane.Contracts.V1";
 
+// Provides Worker-owned login and character-selection operations to Gateways.
 service LoginGameplay {
   rpc GetCompatibility (CompatibilityRequest) returns (CompatibilityResponse);
   rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse);
@@ -10,6 +11,7 @@ service LoginGameplay {
   rpc CloseSession (CloseSessionRequest) returns (CloseSessionResponse);
 }
 
+// Identifies the Gateway request, client session, correlation, and compatibility build.
 message RequestContext {
   string gateway_id = 1;
   uint64 gateway_session_id = 2;
@@ -17,8 +19,10 @@ message RequestContext {
   uint32 client_build = 4;
 }
 
+// Requests the compatibility manifest exposed by the login Worker.
 message CompatibilityRequest {}
 
+// Pins the Worker's client, protocol, and static-data compatibility artifacts.
 message CompatibilityResponse {
   uint32 client_build = 1;
   uint32 protocol_profile = 2;
@@ -27,6 +31,7 @@ message CompatibilityResponse {
   string artifact_sha256 = 5;
 }
 
+// Carries a Gateway-scoped client authentication attempt.
 message AuthenticateRequest {
   RequestContext context = 1;
   string user_name = 2;
@@ -35,6 +40,7 @@ message AuthenticateRequest {
   string country_code = 5;
 }
 
+// Returns an opaque login ticket and neutral account identity after authentication.
 message AuthenticateResponse {
   bool success = 1;
   ServiceError error = 2;
@@ -46,17 +52,20 @@ message AuthenticateResponse {
   int64 role = 8;
 }
 
+// Requests the characters available to a validated login session.
 message CharacterSelectionRequest {
   RequestContext context = 1;
   bytes login_ticket = 2;
 }
 
+// Contains the account and characters available at character selection.
 message CharacterSelectionResponse {
   ServiceError error = 1;
   int64 account_id = 2;
   repeated CharacterSummary characters = 3;
 }
 
+// Describes the character, location, ship, and account-facing selection values.
 message CharacterSummary {
   int64 character_id = 1;
   string name = 2;
@@ -80,15 +89,18 @@ message CharacterSummary {
   int64 ship_id = 20;
 }
 
+// Requests invalidation of a Gateway-scoped login session.
 message CloseSessionRequest {
   RequestContext context = 1;
   bytes login_ticket = 2;
 }
 
+// Reports whether a login session was found and closed.
 message CloseSessionResponse {
   bool closed = 1;
 }
 
+// Carries a stable error code and a human-readable service failure description.
 message ServiceError {
   string code = 1;
   string message = 2;

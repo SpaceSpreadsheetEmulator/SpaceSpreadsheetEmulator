@@ -2,6 +2,9 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Cluster.Directory;
 
+/// <summary>
+/// Describes the node, ownership epoch, and endpoint currently assigned to a logical partition.
+/// </summary>
 public sealed record PartitionAssignment(
     PartitionKey Partition,
     NodeId OwnerNodeId,

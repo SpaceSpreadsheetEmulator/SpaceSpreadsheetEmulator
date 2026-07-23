@@ -5,6 +5,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 
+/// <summary>
+/// Dispatches protocol decode, encode, comparison, and fixture-verification commands.
+/// </summary>
 public static class CommandLine
 {
     public static int Run(string[] arguments, TextWriter output, TextWriter error)

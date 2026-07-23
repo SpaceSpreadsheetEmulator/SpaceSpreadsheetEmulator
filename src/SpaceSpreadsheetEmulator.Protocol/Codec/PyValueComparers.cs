@@ -4,6 +4,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Codec;
 
+/// <summary>
+/// Provides semantic and wire-exact equality strategies for decoded protocol values.
+/// </summary>
 public static class PyValueComparers
 {
     public static IEqualityComparer<PyValue> Semantic { get; } = new SemanticComparer();

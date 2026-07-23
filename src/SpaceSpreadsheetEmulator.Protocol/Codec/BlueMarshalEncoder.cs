@@ -8,6 +8,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Codec;
 
+/// <summary>
+/// Writes protocol values as one canonical or wire-preserving Blue marshal document.
+/// </summary>
 internal sealed class BlueMarshalEncoder(IBufferWriter<byte> output, ProtocolProfile profile, EncodingMode mode)
 {
     public void Write(PyValue value)

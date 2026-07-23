@@ -3,6 +3,9 @@ using SpaceSpreadsheetEmulator.Protocol.Handshake;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
+/// <summary>
+/// Rejects login operations when the Gateway is configured without a reachable gameplay backend.
+/// </summary>
 public sealed class UnavailableLoginBackend : ILoginBackend
 {
     public Task<bool> IsCompatibleAsync(CancellationToken cancellationToken) => Task.FromResult(false);

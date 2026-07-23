@@ -9,6 +9,9 @@ using SpaceSpreadsheetEmulator.Cluster.Contracts.V1;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
+/// <summary>
+/// Resolves solar-system ownership and forwards gameplay transitions over versioned gRPC contracts.
+/// </summary>
 public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
 {
     private const int SolarSystemPartitionKind = 1;

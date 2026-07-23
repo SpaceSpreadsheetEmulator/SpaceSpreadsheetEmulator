@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
+/// <summary>
+/// Represents a finite three-dimensional position or velocity in solar-system space.
+/// </summary>
 public readonly record struct SolarVector3
 {
     public SolarVector3(double x, double y, double z)

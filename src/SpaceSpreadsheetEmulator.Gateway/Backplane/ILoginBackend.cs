@@ -3,6 +3,9 @@ using SpaceSpreadsheetEmulator.Protocol.Handshake;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
+/// <summary>
+/// Contains the opaque login ticket and neutral account data established by a Worker.
+/// </summary>
 public sealed record BackendLoginSession(
     byte[] LoginTicket,
     long AccountId,
@@ -11,6 +14,9 @@ public sealed record BackendLoginSession(
     string CountryCode,
     long Role);
 
+/// <summary>
+/// Defines the Gateway-facing boundary for login and character-selection gameplay operations.
+/// </summary>
 public interface ILoginBackend
 {
     Task<bool> IsCompatibleAsync(CancellationToken cancellationToken);

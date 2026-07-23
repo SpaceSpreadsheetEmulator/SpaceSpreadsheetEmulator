@@ -1,5 +1,8 @@
 namespace SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
+/// <summary>
+/// Identifies one client session owned by a Gateway process.
+/// </summary>
 public readonly record struct GatewaySessionId
 {
     public GatewaySessionId(ulong value)

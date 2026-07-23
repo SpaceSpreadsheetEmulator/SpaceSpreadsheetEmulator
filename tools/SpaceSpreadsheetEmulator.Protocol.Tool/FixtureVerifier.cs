@@ -9,6 +9,9 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 
+/// <summary>
+/// Verifies cleared protocol fixtures against their expected decode and round-trip behavior.
+/// </summary>
 internal static class FixtureVerifier
 {
     public static int Verify(string root)
