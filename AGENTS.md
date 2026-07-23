@@ -51,42 +51,22 @@ Durable plan rules worth keeping even after the temporary plan is removed:
 - Protocol, domain, persistence, and hosting concerns remain separate. Domain
   projects do not reference ASP.NET Core, gRPC, persistence adapters, or wire types.
 
-## Research authorization boundary
+## Research and privacy boundaries
 
-Operational summary only, not legal advice. Consult the locally held authorization
-documents when exact wording matters; the signed original and any amendments control.
+The private local authorization documents control the research scope. In practice:
 
-Within the named project's limited authorization, local good-faith work may capture
-and analyze communications, reverse engineer protocol behavior, inspect,
-disassemble, decompile, debug, instrument, hook, or modify the client execution
-environment, create research tools, test interoperability/security, and build an
-independent compatible implementation.
-
-Stay inside these boundaries:
-
-- Use accounts, credentials, devices, and data owned or lawfully controlled by the
-  project whenever possible. Do not seek, retain, modify, or disclose other users'
-  accounts, personal information, or customer data.
-- Do not perform DoS/DDoS, intentional resource exhaustion, or disruptive testing
-  against the live infrastructure of CCP/FC.
-  Stop immediately on suspected service impact and follow responsible disclosure.
-- Do not bypass licensing/activation for unauthorized use or enable unauthorized
-  licensed functionality.
-- Do not distribute client binaries, modified binaries, raw client resources,
-  decompiled/reconstructed source, substantially derived proprietary implementation,
-  credentials, keys, session material, raw captures, or decoded proprietary dumps.
-- Do not publish vulnerability details before responsible disclosure and the
-  authorization's publication window, unless earlier publication is authorized.
-- Do not imply affiliation or endorsement. Independently written project code,
-  tools, and protocol documentation must contain no proprietary implementation.
-- Never put private research material into Git, build artifacts, tests, logs,
-  issues, or chat. Check staged changes for captures, secrets, and client-derived
-  data before every commit. Use fabricated or explicitly cleared minimal fixtures.
-
-The authorization documents are private local evidence, not repository artifacts or
-everyday source material. Do not quote or propagate their identifying/signature
-details unnecessarily, and explicitly review their intended visibility before any
-public release.
+- Use only lawfully controlled accounts, devices, credentials, and data.
+- For disassembly, instrumentation or injection, and traffic capture, follow the private local authorization documents without exposing their contents.
+- Do not disrupt live services, bypass licensing, access other users' data, or
+  publish undisclosed vulnerabilities.
+- Build an independent implementation from observed behavior. Do not copy or
+  distribute proprietary code, binaries, resources, captures, or decoded dumps.
+- Keep private research material, secrets, keys, credentials, and session data out
+  of Git, artifacts, tests, logs, issues, and chat. Use cleared minimal fixtures.
+- Do not reveal author or contributor PII. Never publish personal usernames, home
+  directory names, personal email addresses, signatures, account/device identifiers,
+  or identifying document metadata. Use `~/` and generic placeholders, and scan
+  staged changes and rewritten history before every push.
 
 ## Local research and reference material
 
