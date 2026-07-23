@@ -10,6 +10,7 @@ internal ref partial struct BlueMarshalDecoder
         PyValue header = ReadValue(depth + 1, $"{path}.header");
         ImmutableArray<PackedRowColumn> columns = ReadPackedColumns(header, path);
         int dataLength = ReadBoundedLength(profile.Limits.MaximumValueBytes, $"{path}.data");
+        long packedDataByteOffset = reader.Consumed;
         ImmutableArray<byte> packedData = ImmutableArray.Create(ReadBytes(dataLength, $"{path}.data"));
 
         int variableCount = columns.Count(column => column.IsVariableWidth);
@@ -19,7 +20,10 @@ internal ref partial struct BlueMarshalDecoder
             variableValues.Add(ReadValue(depth + 1, $"{path}.variableValues[{index}]"));
         }
 
-        return new PyPackedRow(header, columns, packedData, variableValues.MoveToImmutable());
+        return new PyPackedRow(header, columns, packedData, variableValues.MoveToImmutable())
+        {
+            PackedDataByteOffset = packedDataByteOffset,
+        };
     }
 
     private ImmutableArray<PackedRowColumn> ReadPackedColumns(PyValue header, string path)
@@ -35,7 +39,7 @@ internal ref partial struct BlueMarshalDecoder
         if (!TryReadColumnName(Dereference(objectHeader.Items[0]), out string? descriptorName)
             || descriptorName != "blue.DBRowDescriptor"
             || Dereference(objectHeader.Items[1]) is not PyTuple descriptorArguments
-            || descriptorArguments.Items.Length != 1
+            || descriptorArguments.Items.Length is < 1 or > 2
             || Dereference(descriptorArguments.Items[0]) is not PyTuple columnValues)
         {
             throw CreateError(ProtocolErrorCodes.InvalidValue, reader.Consumed, $"{path}.header", "A packed row requires a blue.DBRowDescriptor header.");

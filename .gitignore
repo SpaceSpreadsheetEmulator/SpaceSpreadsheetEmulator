@@ -12,3 +12,4 @@ riderModule.iml
 /infrastructure/.env
 /src/**/appsettings.*.local.json
 /tests/**/appsettings.*.local.json
+/tools/SpaceSpreadsheetEmulator.CaptureInspector/_local/
