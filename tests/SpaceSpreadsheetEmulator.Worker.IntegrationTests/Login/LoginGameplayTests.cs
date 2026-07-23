@@ -7,7 +7,8 @@ using SpaceSpreadsheetEmulator.Worker.IntegrationTests.Support;
 
 namespace SpaceSpreadsheetEmulator.Worker.IntegrationTests.Login;
 
-public class LoginGameplayTests
+[Collection(WorkerPostgreSqlCollection.Name)]
+public class LoginGameplayTests(WorkerPostgreSqlFixture database)
 {
     [Fact]
     public async Task EnrolledAccountReceivesValidatedStarterCharacter()
@@ -18,6 +19,7 @@ public class LoginGameplayTests
                 .UseSetting("Worker:Login:Enabled", "true")
                 .UseSetting("Worker:Login:ArtifactDirectory", artifact.ArtifactDirectory)
                 .UseSetting("Worker:Login:DevelopmentEnrollmentEnabled", "true")
+                .UseSetting("ConnectionStrings:GameDatabase", database.ConnectionString)
                 .UseSetting("Worker:SolarSystem:Enabled", "true")
                 .UseSetting("Worker:SolarSystem:NodeId", "worker-test")
                 .UseSetting("Worker:SolarSystem:Assignments:0:SolarSystemId", "30002780")

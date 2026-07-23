@@ -22,18 +22,24 @@ boundary. Gateway TCP and development enrollment remain disabled by default.
 The current gameplay checkpoint also supports a single configured solar-system
 owner. Coordinator publishes the bootstrap assignment, Gateway caches that route and
 calls the owning Worker directly, and the Worker fences undock/dock mutations by the
-assignment epoch. The development account receives one deterministic starter
-character and ship; durable character storage remains future work.
+assignment epoch. PostgreSQL now owns enrolled account identities, starter characters,
+and their active ship items. Credential proofs and login tickets remain process-local,
+and simulation snapshots remain future Milestone 3 work.
 
 ## Build and verify
 
 ```bash
+dotnet tool restore
 dotnet restore
 dotnet format --verify-no-changes
 dotnet build --configuration Release --no-restore
 dotnet test --configuration Release --no-build
 dotnet run --project tools/SpaceSpreadsheetEmulator.Protocol.Tool -- fixtures verify
 ```
+
+A login-enabled Worker requires a migrated PostgreSQL database. The development
+Compose lifecycle and the rootless Podman setup for real-database tests are documented
+in [infrastructure/README.md](infrastructure/README.md).
 
 Private parser exports can be linked below the gitignored `_local/protocol-captures`
 directory for an additional conditional compatibility test; see

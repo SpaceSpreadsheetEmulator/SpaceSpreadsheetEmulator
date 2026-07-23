@@ -94,8 +94,23 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
         return stream.WriteAsync(bytes).AsTask();
     }
 
-    public async Task CompleteHandshakeAsync(bool fragmentVersion = false)
+    public Task CompleteHandshakeAsync(bool fragmentVersion = false)
+        => CompleteHandshakeAsync(
+            "integration-pilot",
+            ImmutableArray.Create<byte>(0xCA, 0xFE),
+            fragmentVersion);
+
+    public async Task CompleteHandshakeAsync(
+        string userName,
+        ImmutableArray<byte> credentialProof,
+        bool fragmentVersion = false)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userName);
+        if (credentialProof.IsDefaultOrEmpty)
+        {
+            throw new ArgumentException("A credential proof is required.", nameof(credentialProof));
+        }
+
         Assert.IsType<PyTuple>(await ReadValueAsync());
         PyValue version = HandshakeValueCodec.EncodeServerVersion(Profile);
         if (fragmentVersion)
@@ -124,8 +139,8 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
             new PyTuple(
                 new PyInteger(0),
                 Dictionary(
-                    ("user_name", new PyText("integration-pilot")),
-                    ("user_password_hash", new PyBuffer(ImmutableArray.Create<byte>(0xCA, 0xFE))),
+                    ("user_name", new PyText(userName)),
+                    ("user_password_hash", new PyBuffer(credentialProof)),
                     ("user_languageid", new PyText("EN")),
                     ("user_countrycode", new PyText("BG")))),
             encrypted: true);

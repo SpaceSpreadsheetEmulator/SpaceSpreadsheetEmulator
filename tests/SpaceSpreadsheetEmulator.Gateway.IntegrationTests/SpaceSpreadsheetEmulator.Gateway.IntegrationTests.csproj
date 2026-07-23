@@ -12,6 +12,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
@@ -22,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Gateway/SpaceSpreadsheetEmulator.Gateway.csproj" />
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Persistence/SpaceSpreadsheetEmulator.Persistence.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.StaticData/SpaceSpreadsheetEmulator.StaticData.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Coordinator/SpaceSpreadsheetEmulator.Coordinator.csproj"
                       ReferenceOutputAssembly="false" />

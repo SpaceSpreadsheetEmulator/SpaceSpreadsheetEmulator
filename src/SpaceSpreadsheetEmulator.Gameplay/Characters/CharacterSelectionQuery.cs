@@ -11,6 +11,7 @@ namespace SpaceSpreadsheetEmulator.Gameplay.Characters;
 public sealed class CharacterSelectionQuery(
     IStaticDataStore staticData,
     StarterCharacterTemplate template,
+    IStarterCharacterStore characters,
     TimeProvider timeProvider) : ICharacterSelectionQuery
 {
     public async ValueTask<CharacterSelection> ExecuteAsync(
@@ -18,33 +19,58 @@ public sealed class CharacterSelectionQuery(
         CancellationToken cancellationToken = default)
     {
         await template.ValidateAsync(staticData, cancellationToken);
-        StaticDataRecord corporation = await RequiredAsync(StaticDataEntityKind.NpcCorporation, template.CorporationId, cancellationToken);
-        StaticDataRecord station = await RequiredAsync(StaticDataEntityKind.NpcStation, template.StationId, cancellationToken);
-        StaticDataRecord system = await RequiredAsync(StaticDataEntityKind.SolarSystem, template.SolarSystemId, cancellationToken);
-        long characterValue = checked(90_000_000L + account.AccountId.Value);
-        return new CharacterSelection(account.AccountId,
-        [
-            new CharacterSummary(
-                new CharacterId(characterValue),
+        StoredStarterCharacter character = await characters.GetOrCreateAsync(
+            account.AccountId,
+            new StarterCharacterDefinition(
                 template.Name,
                 template.RaceId,
                 template.BloodlineId,
                 template.AncestryId,
                 template.CharacterTypeId,
                 template.CorporationId,
-                corporation.Name,
                 template.StationId,
-                station.Name,
                 template.SolarSystemId,
-                system.Name,
                 template.ConstellationId,
                 template.RegionId,
-                checked(190_000_000L + account.AccountId.Value),
                 template.ShipTypeId,
-                template.ShipName,
+                template.ShipName),
+            timeProvider.GetUtcNow(),
+            cancellationToken);
+        StaticDataRecord corporation = await RequiredAsync(
+            StaticDataEntityKind.NpcCorporation,
+            character.CorporationId,
+            cancellationToken);
+        StaticDataRecord station = await RequiredAsync(
+            StaticDataEntityKind.NpcStation,
+            character.StationId,
+            cancellationToken);
+        StaticDataRecord system = await RequiredAsync(
+            StaticDataEntityKind.SolarSystem,
+            character.SolarSystemId,
+            cancellationToken);
+        return new CharacterSelection(account.AccountId,
+        [
+            new CharacterSummary(
+                character.CharacterId,
+                character.Name,
+                character.RaceId,
+                character.BloodlineId,
+                character.AncestryId,
+                character.CharacterTypeId,
+                character.CorporationId,
+                corporation.Name,
+                character.StationId,
+                station.Name,
+                character.SolarSystemId,
+                system.Name,
+                character.ConstellationId,
+                character.RegionId,
+                character.ShipId,
+                character.ShipTypeId,
+                character.ShipName,
                 template.StartingBalance,
                 template.StartingSkillPoints,
-                timeProvider.GetUtcNow()),
+                character.LastLoginAt),
         ]);
     }
 

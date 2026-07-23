@@ -44,3 +44,52 @@ public interface ICharacterSelectionQuery
         AuthenticatedAccount account,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Defines the durable values needed when provisioning a starter character and ship.
+/// </summary>
+public sealed record StarterCharacterDefinition(
+    string Name,
+    int RaceId,
+    int BloodlineId,
+    int AncestryId,
+    int CharacterTypeId,
+    int CorporationId,
+    int StationId,
+    int SolarSystemId,
+    int ConstellationId,
+    int RegionId,
+    int ShipTypeId,
+    string ShipName);
+
+/// <summary>
+/// Contains the persisted identity and starter-state values used by character selection.
+/// </summary>
+public sealed record StoredStarterCharacter(
+    CharacterId CharacterId,
+    string Name,
+    int RaceId,
+    int BloodlineId,
+    int AncestryId,
+    int CharacterTypeId,
+    int CorporationId,
+    int StationId,
+    int SolarSystemId,
+    int ConstellationId,
+    int RegionId,
+    long ShipId,
+    int ShipTypeId,
+    string ShipName,
+    DateTimeOffset LastLoginAt);
+
+/// <summary>
+/// Loads or atomically provisions the durable starter state for an account.
+/// </summary>
+public interface IStarterCharacterStore
+{
+    ValueTask<StoredStarterCharacter> GetOrCreateAsync(
+        AccountId accountId,
+        StarterCharacterDefinition definition,
+        DateTimeOffset selectedAt,
+        CancellationToken cancellationToken = default);
+}

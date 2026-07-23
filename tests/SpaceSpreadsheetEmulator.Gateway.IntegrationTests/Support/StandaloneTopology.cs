@@ -24,7 +24,9 @@ internal sealed class StandaloneTopology : IAsyncDisposable
 
     public Uri CoordinatorGrpcAddress { get; }
 
-    public static async Task<StandaloneTopology> StartAsync(string artifactDirectory)
+    public static async Task<StandaloneTopology> StartAsync(
+        string artifactDirectory,
+        string gameDatabaseConnectionString)
     {
         int workerManagementPort = ReservePort();
         int workerGrpcPort = ReservePort();
@@ -44,7 +46,11 @@ internal sealed class StandaloneTopology : IAsyncDisposable
             topology.processes.Add(ChildServerProcess.Start(
                 "Worker",
                 ProductionAssembly("Worker"),
-                WorkerEnvironment(artifactDirectory, workerManagementPort, workerGrpcAddress)));
+                WorkerEnvironment(
+                    artifactDirectory,
+                    gameDatabaseConnectionString,
+                    workerManagementPort,
+                    workerGrpcAddress)));
             await WaitForHealthAsync(
                 topology.processes[^1],
                 new Uri($"http://127.0.0.1:{workerManagementPort}/health/ready"));
@@ -90,12 +96,14 @@ internal sealed class StandaloneTopology : IAsyncDisposable
 
     private static IReadOnlyDictionary<string, string> WorkerEnvironment(
         string artifactDirectory,
+        string gameDatabaseConnectionString,
         int managementPort,
         Uri grpcAddress)
         => new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["Kestrel__Endpoints__Management__Url"] = $"http://127.0.0.1:{managementPort}",
             ["Kestrel__Endpoints__Backplane__Url"] = grpcAddress.AbsoluteUri,
+            ["ConnectionStrings__GameDatabase"] = gameDatabaseConnectionString,
             ["Worker__Login__Enabled"] = bool.TrueString,
             ["Worker__Login__ArtifactDirectory"] = artifactDirectory,
             ["Worker__Login__DevelopmentEnrollmentEnabled"] = bool.TrueString,

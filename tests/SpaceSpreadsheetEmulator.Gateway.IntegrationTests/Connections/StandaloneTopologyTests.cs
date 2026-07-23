@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using Google.Protobuf;
 using Grpc.Net.Client;
+using Npgsql;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Cluster.Contracts.V1;
 using SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
@@ -8,13 +10,16 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 
 namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Connections;
 
-public sealed class StandaloneTopologyTests
+[Collection(TopologyPostgreSqlCollection.Name)]
+public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database)
 {
     [Fact]
     public async Task CharacterEntersMovesAndLeavesThroughRealProcesses()
     {
         await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync();
-        await using StandaloneTopology topology = await StandaloneTopology.StartAsync(artifact.ArtifactDirectory);
+        await using StandaloneTopology topology = await StandaloneTopology.StartAsync(
+            artifact.ArtifactDirectory,
+            database.ConnectionString);
         using var client = new ProtocolLoopbackClient(
             await LoopbackClient.ConnectAsync(topology.GatewayEndpoint));
         await client.CompleteHandshakeAsync();
@@ -122,6 +127,90 @@ public sealed class StandaloneTopologyTests
 
         SolarShipStateResponse absent = await solar.GetShipStateAsync(stateRequest);
         Assert.Equal("simulation.entity_not_found", absent.Error.Code);
+    }
+
+    [Fact]
+    public async Task AccountCharacterAndShipSurviveCompleteTopologyRestart()
+    {
+        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync();
+        (long CharacterId, long ShipId) beforeRestart;
+        await using (StandaloneTopology firstTopology = await StandaloneTopology.StartAsync(
+                         artifact.ArtifactDirectory,
+                         database.ConnectionString))
+        {
+            using (var firstAccount = new ProtocolLoopbackClient(
+                       await LoopbackClient.ConnectAsync(firstTopology.GatewayEndpoint)))
+            {
+                await firstAccount.CompleteHandshakeAsync(
+                    "restart-pilot-a",
+                    ImmutableArray.Create<byte>(0xA1));
+                _ = await firstAccount.CallAsync(
+                    "charUnboundMgr",
+                    "GetCharacterSelectionData",
+                    new PyTuple());
+            }
+
+            using var secondAccount = new ProtocolLoopbackClient(
+                await LoopbackClient.ConnectAsync(firstTopology.GatewayEndpoint));
+            await secondAccount.CompleteHandshakeAsync(
+                "restart-pilot-b",
+                ImmutableArray.Create<byte>(0xB2));
+            PyList selection = Assert.IsType<PyList>(await secondAccount.CallAsync(
+                "charUnboundMgr",
+                "GetCharacterSelectionData",
+                new PyTuple()));
+            IReadOnlyDictionary<string, PyValue> selected = ReadSelectedCharacter(selection);
+            long characterId = Integer(selected, "characterID");
+            await secondAccount.CallAsync(
+                "charUnboundMgr",
+                "SelectCharacterID",
+                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
+            beforeRestart = (
+                characterId,
+                CurrentSessionValue(await secondAccount.ReadPacketAsync(), "shipid"));
+        }
+
+        await using (StandaloneTopology secondTopology = await StandaloneTopology.StartAsync(
+                         artifact.ArtifactDirectory,
+                         database.ConnectionString))
+        {
+            using var secondAccountFirst = new ProtocolLoopbackClient(
+                await LoopbackClient.ConnectAsync(secondTopology.GatewayEndpoint));
+            await secondAccountFirst.CompleteHandshakeAsync(
+                "restart-pilot-b",
+                ImmutableArray.Create<byte>(0xB2));
+            PyList selection = Assert.IsType<PyList>(await secondAccountFirst.CallAsync(
+                "charUnboundMgr",
+                "GetCharacterSelectionData",
+                new PyTuple()));
+            IReadOnlyDictionary<string, PyValue> selected = ReadSelectedCharacter(selection);
+            long characterId = Integer(selected, "characterID");
+            await secondAccountFirst.CallAsync(
+                "charUnboundMgr",
+                "SelectCharacterID",
+                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
+            long shipId = CurrentSessionValue(
+                await secondAccountFirst.ReadPacketAsync(),
+                "shipid");
+
+            Assert.Equal(beforeRestart.CharacterId, characterId);
+            Assert.Equal(beforeRestart.ShipId, shipId);
+            Assert.Equal(60000004, Integer(selected, "stationID"));
+        }
+
+        await using var connection = new NpgsqlConnection(database.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT count(*)
+            FROM identity.accounts a
+            JOIN characters.characters c USING (account_id)
+            JOIN inventory.items i
+              ON i.item_id = c.active_ship_item_id
+            WHERE a.normalized_user_name IN ('RESTART-PILOT-A', 'RESTART-PILOT-B')
+            """,
+            connection);
+        Assert.Equal(2L, await command.ExecuteScalarAsync());
     }
 
     private static RequestContext InspectorContext()

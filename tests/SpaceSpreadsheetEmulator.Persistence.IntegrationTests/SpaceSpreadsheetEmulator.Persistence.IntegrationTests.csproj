@@ -1,32 +1,21 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Npgsql" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
-
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
-
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
-    <PackageReference Include="Grpc.Net.Client" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Gameplay/SpaceSpreadsheetEmulator.Gameplay.csproj" />
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Inventory/SpaceSpreadsheetEmulator.Inventory.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Persistence/SpaceSpreadsheetEmulator.Persistence.csproj" />
-    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Worker/SpaceSpreadsheetEmulator.Worker.csproj" />
   </ItemGroup>
-
 </Project>

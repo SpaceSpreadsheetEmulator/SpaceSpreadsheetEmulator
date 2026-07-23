@@ -13,13 +13,15 @@ public class DependencyRules
             ["StaticData"] = ["Primitives"],
             ["Content"] = ["Primitives", "StaticData"],
             ["Identity"] = ["Primitives"],
+            ["Inventory"] = ["Primitives"],
             ["Gameplay"] = ["Content", "Identity", "Primitives", "StaticData"],
             ["Simulation"] = ["Primitives"],
             ["Cluster.Contracts"] = ["Primitives"],
             ["Cluster"] = ["Cluster.Contracts", "Primitives"],
+            ["Persistence"] = ["Gameplay", "Identity", "Inventory", "Primitives"],
             ["Gateway"] = ["Backplane.Contracts", "Cluster.Contracts", "Primitives", "Protocol"],
             ["Coordinator"] = ["Cluster.Contracts", "Cluster"],
-            ["Worker"] = ["Backplane.Contracts", "Content", "Gameplay", "Identity", "Primitives", "Simulation", "StaticData"],
+            ["Worker"] = ["Backplane.Contracts", "Content", "Gameplay", "Identity", "Persistence", "Primitives", "Simulation", "StaticData"],
         };
 
     [Fact]

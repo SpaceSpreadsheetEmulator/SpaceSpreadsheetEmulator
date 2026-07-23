@@ -57,3 +57,29 @@ public interface IAccountAuthenticator
         LoginAttempt attempt,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Identifies an enrolled account without retaining its authentication proof.
+/// </summary>
+public sealed record AccountIdentity(AccountId AccountId, string UserName);
+
+/// <summary>
+/// Contains either the resolved account identity or a capacity rejection.
+/// </summary>
+public sealed record AccountEnrollmentResult(AccountIdentity? Account, bool CapacityReached)
+{
+    public static AccountEnrollmentResult Success(AccountIdentity account) => new(account, false);
+
+    public static AccountEnrollmentResult CapacityRejected() => new(null, true);
+}
+
+/// <summary>
+/// Resolves or enrolls durable account identities independently of credential storage.
+/// </summary>
+public interface IAccountIdentityStore
+{
+    ValueTask<AccountEnrollmentResult> GetOrEnrollAsync(
+        string userName,
+        int maximumAccounts,
+        CancellationToken cancellationToken = default);
+}

@@ -12,8 +12,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - run: dotnet tool restore
       - run: dotnet restore SpaceSpreadsheetEmulator.slnx
       - run: dotnet format SpaceSpreadsheetEmulator.slnx --verify-no-changes --no-restore
       - run: dotnet build SpaceSpreadsheetEmulator.slnx --configuration Release --no-restore
+      - run: >-
+          dotnet ef migrations has-pending-model-changes
+          --project src/SpaceSpreadsheetEmulator.Persistence
+          --startup-project src/SpaceSpreadsheetEmulator.Persistence
+          --configuration Release
+          --no-build
       - run: dotnet test SpaceSpreadsheetEmulator.slnx --configuration Release --no-build
       - run: dotnet run --project tools/SpaceSpreadsheetEmulator.Protocol.Tool --configuration Release --no-build -- fixtures verify

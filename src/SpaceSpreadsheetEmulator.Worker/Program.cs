@@ -2,8 +2,11 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using SpaceSpreadsheetEmulator.Content.Characters;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
+using SpaceSpreadsheetEmulator.Persistence;
+using SpaceSpreadsheetEmulator.Persistence.Database;
 using SpaceSpreadsheetEmulator.StaticData;
 using SpaceSpreadsheetEmulator.Worker.Login;
+using SpaceSpreadsheetEmulator.Worker.Persistence;
 using SpaceSpreadsheetEmulator.Worker.Simulation;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
@@ -46,6 +49,16 @@ if (solarOptions.Enabled && !solarOptions.HasValidAssignments())
 
 if (loginOptions.Enabled)
 {
+    string connectionString = builder.Configuration.GetConnectionString("GameDatabase")
+        ?? throw new InvalidOperationException(
+            "A login-enabled Worker requires ConnectionStrings:GameDatabase.");
+    builder.Services.AddGamePersistence(connectionString);
+    builder.Services.AddHealthChecks()
+        .AddCheck<GameDatabaseHealthCheck>("game-database");
+}
+
+if (loginOptions.Enabled)
+{
     SqliteStaticDataStore staticData = await SqliteStaticDataStore.OpenAsync(loginOptions.ArtifactDirectory);
     if (staticData.Compatibility is not { ClientBuild: 3_396_210, ProtocolProfile: 3_396_210, SdeBuild: 3_396_210 })
     {
@@ -57,9 +70,11 @@ if (loginOptions.Enabled)
     await template.ValidateAsync(staticData);
     builder.Services.AddSingleton<IStaticDataStore>(staticData);
     builder.Services.AddSingleton(template);
-    builder.Services.AddSingleton<IAccountAuthenticator>(new InMemoryAccountAuthenticator(
-        loginOptions.DevelopmentEnrollmentEnabled,
-        loginOptions.MaximumAccounts));
+    builder.Services.AddSingleton<IAccountAuthenticator>(services =>
+        new InMemoryAccountAuthenticator(
+            services.GetRequiredService<IAccountIdentityStore>(),
+            loginOptions.DevelopmentEnrollmentEnabled,
+            loginOptions.MaximumAccounts));
     builder.Services.AddSingleton<ICharacterSelectionQuery, CharacterSelectionQuery>();
     builder.Services.AddSingleton<LoginTicketRegistry>();
 }
@@ -87,6 +102,17 @@ if (solarOptions.Enabled)
 }
 
 var app = builder.Build();
+
+if (loginOptions.Enabled)
+{
+    GameDatabaseReadiness readiness = await app.Services
+        .GetRequiredService<IGameDatabaseReadinessProbe>()
+        .CheckAsync();
+    if (!readiness.IsReady)
+    {
+        throw new InvalidOperationException(readiness.Detail);
+    }
+}
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready");

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Gameplay/SpaceSpreadsheetEmulator.Gameplay.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Inventory/SpaceSpreadsheetEmulator.Inventory.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SpaceSpreadsheetEmulator.Gateway.IntegrationTests" />
+    <InternalsVisibleTo Include="SpaceSpreadsheetEmulator.Persistence.IntegrationTests" />
+    <InternalsVisibleTo Include="SpaceSpreadsheetEmulator.Worker.IntegrationTests" />
+  </ItemGroup>
+</Project>
