@@ -6,6 +6,8 @@ namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 
 internal sealed class TestLoginBackend : ILoginBackend
 {
+    public Func<CharacterSelectionResponse?>? CharacterSelectionFactory { get; set; }
+
     public Task<bool> IsCompatibleAsync(CancellationToken cancellationToken)
         => Task.FromResult(true);
 
@@ -26,6 +28,11 @@ internal sealed class TestLoginBackend : ILoginBackend
         ReadOnlyMemory<byte> loginTicket,
         CancellationToken cancellationToken)
     {
+        if (CharacterSelectionFactory is not null)
+        {
+            return Task.FromResult(CharacterSelectionFactory());
+        }
+
         var response = new CharacterSelectionResponse { AccountId = 7 };
         response.Characters.Add(new CharacterSummary
         {

@@ -40,6 +40,7 @@ internal sealed partial class GatewayClientConnection(
     private HandshakeState state = HandshakeState.WaitVersion;
     private AesCbcFrameCipher? cipher;
     private BackendLoginSession? loginSession;
+    private DateTimeOffset? authenticatedAt;
     private CharacterSummary? selectedCharacter;
     private CharacterSelectionResponse? characterSelection;
     private string? solarSystemBinding;
@@ -267,6 +268,7 @@ internal sealed partial class GatewayClientConnection(
                         return Error(ProtocolErrorCodes.InvalidHandshake, "$handshake.login", "Authentication was rejected.");
                     }
 
+                    authenticatedAt = timeProvider.GetUtcNow();
                     long clientId = checked(1_000_000L + loginSession.AccountId);
                     await QueueValueAsync(HandshakeValueCodec.EncodePasswordVersion(), outbound, encrypt: cipher is not null, cancellationToken);
                     await QueueValueAsync(

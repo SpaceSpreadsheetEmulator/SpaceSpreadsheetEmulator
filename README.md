@@ -12,10 +12,14 @@ endpoints, the build-3396210 protocol profile, a bounded binary codec, framing,
 compression, MachoNet envelopes, handshake and AES-CBC transport modes, and a
 conventional asynchronous TCP listener. The first vertical slice promotes an
 immutable SDE artifact, authenticates a development account through Worker gRPC,
-creates a deterministic starter character, and serves the initial MachoNet bootstrap.
-Gateway TCP and development enrollment remain disabled by default.
+creates a deterministic starter character, and authors the build-specific packed
+character-selection rowsets and dependent owner records from current Worker state.
+Captured startup replay is limited to explicitly allowlisted auxiliary bootstrap
+queries. A fresh graphical build-3396210 run accepts the authored selection and sends
+`SelectCharacterID`; the first post-selection session transition is the Milestone 3
+boundary. Gateway TCP and development enrollment remain disabled by default.
 
-The current WIP gameplay checkpoint also supports a single configured solar-system
+The current gameplay checkpoint also supports a single configured solar-system
 owner. Coordinator publishes the bootstrap assignment, Gateway caches that route and
 calls the owning Worker directly, and the Worker fences undock/dock mutations by the
 assignment epoch. The development account receives one deterministic starter

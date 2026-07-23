@@ -5,12 +5,37 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 namespace SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
 /// <summary>
-/// Build-3396210 startup compatibility. When a private replay bundle is configured,
-/// its decoded static results take precedence over the independently authored
-/// fallbacks below.
+/// Build-3396210 auxiliary startup compatibility. An explicitly allowlisted private
+/// replay result takes precedence over the independently authored fallback for the
+/// same non-authoritative route.
 /// </summary>
 internal sealed class Build3396210StartupProfile
 {
+    private static readonly HashSet<string> ReplayableRoutes = new(StringComparer.Ordinal)
+    {
+        "air_npe.is_air_npe_enabled",
+        "alert.BeanCount",
+        "charUnboundMgr.GetCharOmegaDowngradeStatus",
+        "charUnboundMgr.GetCharacterLockType",
+        "config.GetAverageMarketPrices",
+        "config.GetBlackListedPlanets",
+        "config.GetOldStationData",
+        "eventLog.LogPlayerRequestedDisconnect",
+        "invbroker.GetItemDescriptor",
+        "loginCampaignManager.get_client_campaign_state",
+        "machoNet.GetConnectedClusterName",
+        "machoNet.GetServiceInfo",
+        "map.GetSecurityModifiedSystems",
+        "multiLoginBlocker.Login",
+        "objectCaching.GetCachableObject",
+        "populationCap.MachoBindObject",
+        "populationCap.MachoResolveObject",
+        "raffleProxy.AmIBanned",
+        "seasonalLoginCampaignManager.get_active_campaign",
+        "subscriptionMgr.GetCloneGrade",
+        "userSvc.GetRedeemTokens",
+    };
+
     private readonly CapturedStartupReplay? replay;
 
     public Build3396210StartupProfile(GatewayCompatibilityOptions options)
@@ -19,7 +44,8 @@ internal sealed class Build3396210StartupProfile
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
         replay = CapturedStartupReplay.LoadOptional(
             options.CapturedStartupDataDirectory,
-            profile);
+            profile,
+            ReplayableRoutes.Contains);
     }
 
     public CapturedStartupReplayCursor CreateCursor() => new(replay);
@@ -75,8 +101,6 @@ internal sealed class Build3396210StartupProfile
             "charUnboundMgr.GetCharacterLockType" or
             "eventLog.LogPlayerRequestedDisconnect" or
             "objectCaching.GetCachableObject" => Response(PyNull.Instance),
-            "config.GetMultiOwnersEx" or
-            "config.GetMultiCorpTickerNamesEx" => Response(new PyList()),
             _ => null,
         };
     }

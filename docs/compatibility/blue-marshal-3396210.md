@@ -80,12 +80,25 @@ of `(name, numeric encoding)` columns. The selected observation set contains:
 | `129` | bytes | following marshal value |
 | `130` | Unicode text | following marshal value |
 
-The codec validates the descriptor, column bound, packed byte bound, and one
+The general codec validates the descriptor, column bound, packed byte bound, and one
 following marshal value for each variable-width encoding. It preserves the fixed
 packed section as bytes because row layout is descriptor-dependent; no inferred
-field projection is presented as protocol fact. Canonical encoding accepts those
-same explicit packed bytes and variable values, so every observed row can be
+field projection is presented as a general protocol fact. Canonical encoding accepts
+those same explicit packed bytes and variable values, so every observed row can be
 decoded and reproduced without loss.
+
+Gateway's build-3396210 character-selection adapter has a deliberately narrower
+authored writer. Fixed fields are stably ordered by descending width, written
+little-endian, and followed by Boolean bits and descriptor-order null bits. The bit
+field uses `((boolean count + column count) >> 3) + 1` bytes. The combined fixed and
+bit sections use the observed zero-run encoding: each control nibble represents up
+to eight literal bytes or up to eight zero bytes. Variable-width values follow in
+descriptor order. The writer rejects unsupported encodings, CLR/wire type mismatches,
+and out-of-range fixed values.
+
+This construction rule is scoped to the selected build and tested through the
+Gateway TCP path with a fabricated starter character. It does not turn the
+descriptor-preserving protocol decoder into a generic database-row projector.
 
 ## Limits and framing
 

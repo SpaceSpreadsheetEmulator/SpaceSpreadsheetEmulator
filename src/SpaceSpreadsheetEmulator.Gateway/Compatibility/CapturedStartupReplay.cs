@@ -28,8 +28,10 @@ internal sealed class CapturedStartupReplay
 
     public static CapturedStartupReplay? LoadOptional(
         string directory,
-        ProtocolProfile profile)
+        ProtocolProfile profile,
+        Func<string, bool> isRouteAllowed)
     {
+        ArgumentNullException.ThrowIfNull(isRouteAllowed);
         if (string.IsNullOrWhiteSpace(directory))
         {
             return null;
@@ -45,6 +47,11 @@ internal sealed class CapturedStartupReplay
         var loaded = ImmutableArray.CreateBuilder<CapturedReplayResponse>(manifest.Entries.Length);
         foreach (ReplayManifestEntry entry in manifest.Entries)
         {
+            if (!isRouteAllowed(entry.Route))
+            {
+                continue;
+            }
+
             string path = ResolveFile(root, entry.File);
             byte[] marshal = File.ReadAllBytes(path);
             string actualHash = Convert.ToHexStringLower(SHA256.HashData(marshal));

@@ -227,28 +227,125 @@ public class ConnectionIoTests
     }
 
     [Fact]
-    public async Task HeadlessCharacterCanSelectUndockAndDock()
+    public async Task CharacterSelectionIgnoresCapturedCoreRoute()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"sse-captured-selection-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string manifest = JsonSerializer.Serialize(new
+            {
+                formatVersion = 1,
+                targetClientBuild = 3_396_210,
+                responseCount = 3,
+                entries = new[]
+                {
+                    new
+                    {
+                        route = "charUnboundMgr.GetCharacterSelectionData",
+                        file = "must-not-be-read.marshal",
+                        sha256 = new string('0', 64),
+                    },
+                    new
+                    {
+                        route = "config.GetMultiOwnersEx",
+                        file = "must-not-be-read-owners.marshal",
+                        sha256 = new string('0', 64),
+                    },
+                    new
+                    {
+                        route = "config.GetMultiCorpTickerNamesEx",
+                        file = "must-not-be-read-tickers.marshal",
+                        sha256 = new string('0', 64),
+                    },
+                },
+            });
+            await File.WriteAllTextAsync(Path.Combine(directory, "manifest.json"), manifest);
+
+            await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1, directory);
+            using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
+            await client.CompleteHandshakeAsync();
+
+            PyList selection = Assert.IsType<PyList>(await client.CallAsync(
+                "charUnboundMgr",
+                "GetCharacterSelectionData",
+                new PyTuple()));
+            IReadOnlyDictionary<string, PyValue> character = AssertCharacterSelectionShape(selection);
+            long characterId = Integer(character, "characterID");
+            long corporationId = Integer(character, "corporationID");
+            PyTuple owners = Assert.IsType<PyTuple>(await client.CallAsync(
+                "config",
+                "GetMultiOwnersEx",
+                new PyTuple(new PyList(
+                    new PyInteger(corporationId),
+                    new PyInteger(characterId)))));
+            Assert.Equal(2, Assert.IsType<PyList>(owners.Items[1]).Items.Length);
+            PyTuple tickers = Assert.IsType<PyTuple>(await client.CallAsync(
+                "config",
+                "GetMultiCorpTickerNamesEx",
+                new PyTuple(new PyList(new PyInteger(corporationId)))));
+            Assert.Single(Assert.IsType<PyList>(tickers.Items[1]).Items);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoopbackCharacterCanSelectUndockAndDock()
     {
         await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
         using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
         await client.CompleteHandshakeAsync();
 
-        PyTuple selection = Assert.IsType<PyTuple>(await client.CallAsync(
+        PyList selection = Assert.IsType<PyList>(await client.CallAsync(
             "charUnboundMgr",
             "GetCharacterSelectionData",
             new PyTuple()));
-        PyDictionary character = Assert.IsType<PyDictionary>(Assert.Single(
-            Assert.IsType<PyList>(selection.Items[2]).Items));
+        IReadOnlyDictionary<string, PyValue> character = AssertCharacterSelectionShape(selection);
         long characterId = Integer(character, "characterID");
+        long corporationId = Integer(character, "corporationID");
         long stationId = Integer(character, "stationID");
-        long shipId = Integer(character, "shipID");
         long solarSystemId = Integer(character, "solarSystemID");
+
+        PyTuple owners = Assert.IsType<PyTuple>(await client.CallAsync(
+            "config",
+            "GetMultiOwnersEx",
+            new PyTuple(new PyList(
+                new PyInteger(corporationId),
+                new PyInteger(characterId)))));
+        Assert.Equal(
+            ["ownerID", "ownerName", "typeID", "gender", "ownerNameID"],
+            Assert.IsType<PyList>(owners.Items[0]).Items.Select(Text).ToArray());
+        PyList ownerRows = Assert.IsType<PyList>(owners.Items[1]);
+        Assert.Equal(2, ownerRows.Items.Length);
+        Assert.Contains(
+            ownerRows.Items,
+            row => Assert.IsType<PyInteger>(Assert.IsType<PyList>(row).Items[0]).Value == characterId);
+        Assert.Contains(
+            ownerRows.Items,
+            row => Assert.IsType<PyInteger>(Assert.IsType<PyList>(row).Items[0]).Value == corporationId);
+
+        PyTuple tickers = Assert.IsType<PyTuple>(await client.CallAsync(
+            "config",
+            "GetMultiCorpTickerNamesEx",
+            new PyTuple(new PyList(new PyInteger(corporationId)))));
+        IReadOnlyDictionary<string, PyValue> ticker = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(Assert.Single(
+                Assert.IsType<PyList>(tickers.Items[1]).Items)));
+        Assert.Equal(corporationId, Integer(ticker, "corporationID"));
+        Assert.Equal("SARB", Text(ticker["tickerName"]));
 
         await client.CallAsync(
             "charUnboundMgr",
             "SelectCharacterID",
             new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
-        AssertSessionStation(await client.ReadPacketAsync(), stationId);
+        MachoPacket selectionNotification = await client.ReadPacketAsync();
+        AssertSessionStation(selectionNotification, stationId);
+        long shipId = CurrentSessionValue(selectionNotification, "shipid");
 
         var nestedUndock = new PyTuple(
             new PyBuffer("Undock"u8),
@@ -279,8 +376,147 @@ public class ConnectionIoTests
         Assert.Equal(1, gateway.SolarBackend.DockCount);
     }
 
-    private static long Integer(PyDictionary dictionary, string key)
-        => Assert.IsType<PyInteger>(Value(dictionary, key)).Value;
+    [Fact]
+    public async Task InvalidWorkerCharacterSelectionReturnsTypedEmptyRows()
+    {
+        await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
+        gateway.LoginBackend.CharacterSelectionFactory = () =>
+        {
+            var response = new SpaceSpreadsheetEmulator.Backplane.Contracts.V1.CharacterSelectionResponse
+            {
+                AccountId = 8,
+            };
+            response.Characters.Add(new SpaceSpreadsheetEmulator.Backplane.Contracts.V1.CharacterSummary
+            {
+                CharacterId = 90_000_007,
+                Name = "Wrong Account",
+                Balance = "5000",
+            });
+            return response;
+        };
+        using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
+        await client.CompleteHandshakeAsync();
+
+        PyList selection = Assert.IsType<PyList>(await client.CallAsync(
+            "charUnboundMgr",
+            "GetCharacterSelectionData",
+            new PyTuple()));
+
+        Assert.Equal(4, selection.Items.Length);
+        Assert.Single(AssertRowset(
+            selection.Items[0],
+            "userName",
+            "characterSlots",
+            "maxCharacterSlots",
+            "subscriptionEndTime",
+            "creationDate").ListItems);
+        Assert.Empty(AssertRowset(selection.Items[1], "trainingEnds").ListItems);
+        Assert.Empty(Assert.IsType<PyExtendedObject>(selection.Items[2]).ListItems);
+        Assert.Empty(Assert.IsType<PyExtendedObject>(selection.Items[3]).ListItems);
+        Assert.IsType<PyNull>(await client.CallAsync(
+            "charUnboundMgr",
+            "SelectCharacterID",
+            new PyTuple(new PyInteger(90_000_007))));
+    }
+
+    private static IReadOnlyDictionary<string, PyValue> AssertCharacterSelectionShape(PyList selection)
+    {
+        Assert.Equal(4, selection.Items.Length);
+        PyExtendedObject accountRowset = AssertRowset(selection.Items[0],
+            "userName",
+            "characterSlots",
+            "maxCharacterSlots",
+            "subscriptionEndTime",
+            "creationDate");
+        IReadOnlyDictionary<string, PyValue> account = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(Assert.Single(accountRowset.ListItems)));
+        Assert.Equal("integration-pilot", Text(account["userName"]));
+        Assert.Equal(3, Assert.IsType<PyInteger>(account["characterSlots"]).Value);
+        Assert.Equal("3", Text(account["maxCharacterSlots"]));
+        Assert.IsType<PyNull>(account["subscriptionEndTime"]);
+        Assert.True(Assert.IsType<PyInteger>(account["creationDate"]).Value > 0);
+
+        Assert.Empty(AssertRowset(selection.Items[1], "trainingEnds").ListItems);
+        PyExtendedObject characterRowset = AssertRowset(selection.Items[2],
+            "characterID",
+            "logoffDate",
+            "skillPoints",
+            "paperdollState",
+            "characterName",
+            "typeID",
+            "gender",
+            "bloodlineID",
+            "raceID",
+            "deletePrepareDateTime",
+            "balance",
+            "balanceChange",
+            "corporationID",
+            "allianceID",
+            "factionID",
+            "unreadMailCount",
+            "shipTypeID",
+            "solarSystemID",
+            "stationID",
+            "locationSecurity",
+            "finishedSkills",
+            "skillsInQueue",
+            "skillTypeID",
+            "toLevel",
+            "trainingStartTime",
+            "trainingEndTime",
+            "queueEndTime",
+            "finishSP",
+            "trainedSP",
+            "lockTypeID",
+            "daysTotal",
+            "daysCompleted");
+        IReadOnlyDictionary<string, PyValue> character = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(Assert.Single(characterRowset.ListItems)));
+        Assert.Equal("Spreadsheet Pilot", Text(character["characterName"]));
+        Assert.Equal(5000, Integer(character, "balance"));
+        Assert.False(Assert.IsType<PyBoolean>(character["gender"]).Value);
+        Assert.IsType<PyNull>(character["allianceID"]);
+        Assert.Empty(AssertRowset(
+            selection.Items[3],
+            "characterID",
+            "warID",
+            "declaredByID",
+            "againstID",
+            "mutual",
+            "ally").ListItems);
+        return character;
+    }
+
+    private static PyExtendedObject AssertRowset(PyValue value, params string[] expectedColumns)
+    {
+        PyExtendedObject rowset = Assert.IsType<PyExtendedObject>(value);
+        Assert.Equal(2, rowset.Variant);
+        PyTuple header = Assert.IsType<PyTuple>(rowset.Header);
+        PyTuple bases = Assert.IsType<PyTuple>(header.Items[0]);
+        Assert.Equal(
+            "carbon.common.script.sys.crowset.CRowset",
+            Text(bases.Items[0]));
+        PyDictionary attributes = Assert.IsType<PyDictionary>(header.Items[1]);
+        PyExtendedObject descriptor = Assert.IsType<PyExtendedObject>(Value(attributes, "header"));
+        PyTuple descriptorHeader = Assert.IsType<PyTuple>(descriptor.Header);
+        Assert.Equal("blue.DBRowDescriptor", Text(descriptorHeader.Items[0]));
+        PyTuple descriptorArguments = Assert.IsType<PyTuple>(descriptorHeader.Items[1]);
+        PyTuple columns = Assert.IsType<PyTuple>(descriptorArguments.Items[0]);
+        Assert.Equal(
+            expectedColumns,
+            columns.Items.Select(column => Text(Assert.IsType<PyTuple>(column).Items[0])).ToArray());
+        return rowset;
+    }
+
+    private static long Integer(IReadOnlyDictionary<string, PyValue> dictionary, string key)
+        => Assert.IsType<PyInteger>(dictionary[key]).Value;
+
+    private static long CurrentSessionValue(MachoPacket packet, string key)
+    {
+        PyDictionary session = Assert.IsType<PyDictionary>(packet.Payload);
+        PyTuple change = Assert.IsType<PyTuple>(Value(session, key));
+        return Assert.IsType<PyInteger>(change.Items[1]).Value;
+    }
 
     private static void AssertSessionStation(MachoPacket packet, long? expectedStationId)
     {
@@ -307,6 +543,8 @@ public class ConnectionIoTests
         => value switch
         {
             PyText text => text.Value,
+            PyToken token => token.Value,
+            PyStringTableReference reference => reference.Value,
             PyBuffer buffer => System.Text.Encoding.UTF8.GetString(buffer.Value.AsSpan()),
             _ => throw new Xunit.Sdk.XunitException($"Expected text-compatible value, found {value.GetType().Name}."),
         };

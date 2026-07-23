@@ -17,17 +17,21 @@ internal sealed class GatewayHostHarness : IAsyncDisposable
         IHost host,
         IPEndPoint endpoint,
         GatewayConnectionMetrics metrics,
+        TestLoginBackend loginBackend,
         TestSolarSystemBackend solarBackend)
     {
         this.host = host;
         Endpoint = endpoint;
         Metrics = metrics;
+        LoginBackend = loginBackend;
         SolarBackend = solarBackend;
     }
 
     public IPEndPoint Endpoint { get; }
 
     public GatewayConnectionMetrics Metrics { get; }
+
+    public TestLoginBackend LoginBackend { get; }
 
     public TestSolarSystemBackend SolarBackend { get; }
 
@@ -45,7 +49,9 @@ internal sealed class GatewayHostHarness : IAsyncDisposable
             SoftConnectionLimit = softLimit,
             OutboundQueueCapacity = 4,
         }));
-        builder.Services.AddSingleton<ILoginBackend, TestLoginBackend>();
+        builder.Services.AddSingleton<TestLoginBackend>();
+        builder.Services.AddSingleton<ILoginBackend>(
+            services => services.GetRequiredService<TestLoginBackend>());
         builder.Services.AddSingleton<ISolarSystemBackend, TestSolarSystemBackend>();
         builder.Services.AddSingleton<IOptions<GatewayCompatibilityOptions>>(
             Options.Create(new GatewayCompatibilityOptions
@@ -65,6 +71,7 @@ internal sealed class GatewayHostHarness : IAsyncDisposable
             host,
             listener.BoundEndpoint!,
             host.Services.GetRequiredService<GatewayConnectionMetrics>(),
+            host.Services.GetRequiredService<TestLoginBackend>(),
             (TestSolarSystemBackend)host.Services.GetRequiredService<ISolarSystemBackend>());
     }
 

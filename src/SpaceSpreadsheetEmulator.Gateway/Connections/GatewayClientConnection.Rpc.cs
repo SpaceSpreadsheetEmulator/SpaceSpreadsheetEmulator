@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Text;
 using System.Threading.Channels;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
@@ -114,25 +113,34 @@ internal sealed partial class GatewayClientConnection
         string route = request.BoundObject is null
             ? $"{request.Service}.{request.Method}"
             : $"bound.{request.Method}";
-        StartupResponse? startupResponse = Build3396210StartupProfile.CreateResponse(
-            startupReplay,
-            route,
-            request.Arguments);
-        if (startupResponse is not null)
-        {
-            return Result(startupResponse.Value);
-        }
-
-        return route switch
+        RpcDispatchResult? dynamicResponse = route switch
         {
             "machoNet.GetTime" => Result(new PyInteger(timeProvider.GetUtcNow().UtcDateTime.ToFileTimeUtc())),
             "charUnboundMgr.GetCharacterSelectionData" => Result(await CreateCharacterSelectionAsync(cancellationToken)),
+            "config.GetMultiOwnersEx" => Result(Build3396210OwnerMapper.CreateOwners(
+                characterSelection,
+                ReadRequestedIds(request.Arguments))),
+            "config.GetMultiCorpTickerNamesEx" => Result(Build3396210OwnerMapper.CreateCorporationTickers(
+                characterSelection,
+                ReadRequestedIds(request.Arguments))),
             "charUnboundMgr.SelectCharacterID" => SelectCharacter(request),
             "ship.MachoBindObject" => await UndockAsync(request, cancellationToken),
             "beyonce.MachoBindObject" => BindSolarSystem(request),
             "bound.CmdDock" => await DockAsync(request, cancellationToken),
-            _ => Unsupported(request, route),
+            _ => null,
         };
+        if (dynamicResponse is not null)
+        {
+            return dynamicResponse;
+        }
+
+        StartupResponse? startupResponse = Build3396210StartupProfile.CreateResponse(
+            startupReplay,
+            route,
+            request.Arguments);
+        return startupResponse is null
+            ? Unsupported(request, route)
+            : Result(startupResponse.Value);
     }
 
     private RpcDispatchResult Unsupported(MachoRpcRequest request, string route)
@@ -298,41 +306,22 @@ internal sealed partial class GatewayClientConnection
             gatewaySessionId,
             loginSession!.LoginTicket,
             cancellationToken);
-        characterSelection = response;
-        if (response is null)
+        PyList result = Build3396210CharacterSelectionMapper.Create(
+            loginSession,
+            response,
+            authenticatedAt ?? timeProvider.GetUtcNow(),
+            out CharacterSelectionResponse? selectable);
+        characterSelection = selectable;
+        if (selectable is null && response is not null)
         {
-            return new PyTuple(new PyDictionary(), new PyDictionary(), new PyList(), new PyList());
+            LogInvalidCharacterSelection(logger);
+        }
+        else
+        {
+            LogCharacterSelectionBuilt(logger, selectable?.Characters.Count ?? 0);
         }
 
-        var characters = new PyList(response.Characters.Select(character => Dictionary(
-            ("characterID", new PyInteger(character.CharacterId)),
-            ("characterName", new PyText(character.Name)),
-            ("gender", new PyInteger(0)),
-            ("typeID", new PyInteger(character.CharacterTypeId)),
-            ("raceID", new PyInteger(character.RaceId)),
-            ("bloodlineID", new PyInteger(character.BloodlineId)),
-            ("ancestryID", new PyInteger(character.AncestryId)),
-            ("corporationID", new PyInteger(character.CorporationId)),
-            ("corporationName", new PyText(character.CorporationName)),
-            ("stationID", new PyInteger(character.StationId)),
-            ("stationName", new PyText(character.StationName)),
-            ("solarSystemID", new PyInteger(character.SolarSystemId)),
-            ("solarSystemName", new PyText(character.SolarSystemName)),
-            ("constellationID", new PyInteger(character.ConstellationId)),
-            ("regionID", new PyInteger(character.RegionId)),
-            ("shipID", new PyInteger(character.ShipId)),
-            ("shipTypeID", new PyInteger(character.ShipTypeId)),
-            ("shipName", new PyText(character.ShipName)),
-            ("balance", new PyFloat(double.Parse(character.Balance, CultureInfo.InvariantCulture))),
-            ("skillPoints", new PyInteger(character.SkillPoints)),
-            ("lastLogin", new PyInteger(character.LastLoginUnixMilliseconds))))
-            .Cast<PyValue>()
-            .ToArray());
-        return new PyTuple(
-            Dictionary(("userID", new PyInteger(response.AccountId))),
-            new PyDictionary(),
-            characters,
-            new PyList());
+        return result;
     }
 
     private static bool TryReadUndockArguments(
@@ -349,6 +338,20 @@ internal sealed partial class GatewayClientConnection
             && string.Equals(ReadText(nested.Items[0]), "Undock", StringComparison.Ordinal)
             && nested.Items[1] is PyTuple { Items.Length: >= 1 } action
             && TryInteger(action.Items[0], out shipId);
+    }
+
+    private static IReadOnlySet<long> ReadRequestedIds(PyTuple arguments)
+    {
+        if (arguments.Items.Length == 0 || Unwrap(arguments.Items[0]) is not PyList requested)
+        {
+            return new HashSet<long>();
+        }
+
+        return requested.Items
+            .Select(Unwrap)
+            .OfType<PyInteger>()
+            .Select(value => value.Value)
+            .ToHashSet();
     }
 
     private static bool TryReadDockArguments(
@@ -398,6 +401,18 @@ internal sealed partial class GatewayClientConnection
         ILogger logger,
         long callId,
         string route);
+
+    [LoggerMessage(
+        EventId = 112,
+        Level = LogLevel.Information,
+        Message = "Built Worker-backed character selection with {CharacterCount} characters")]
+    private static partial void LogCharacterSelectionBuilt(ILogger logger, int characterCount);
+
+    [LoggerMessage(
+        EventId = 113,
+        Level = LogLevel.Warning,
+        Message = "Worker returned invalid character selection data; returning no selectable characters")]
+    private static partial void LogInvalidCharacterSelection(ILogger logger);
 
     private static string? ReadText(PyValue value)
         => value switch
