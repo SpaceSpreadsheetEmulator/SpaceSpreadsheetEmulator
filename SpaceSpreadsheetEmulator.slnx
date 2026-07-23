@@ -22,6 +22,7 @@
     <Project Path="tests/SpaceSpreadsheetEmulator.Milestone2.Tests/SpaceSpreadsheetEmulator.Milestone2.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Protocol.Tests/SpaceSpreadsheetEmulator.Protocol.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Protocol.Tool.Tests/SpaceSpreadsheetEmulator.Protocol.Tool.Tests.csproj" />
+    <Project Path="tests/SpaceSpreadsheetEmulator.Simulation.Tests/SpaceSpreadsheetEmulator.Simulation.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Worker.IntegrationTests/SpaceSpreadsheetEmulator.Worker.IntegrationTests.csproj" />
   </Folder>
   <Folder Name="/tools/">

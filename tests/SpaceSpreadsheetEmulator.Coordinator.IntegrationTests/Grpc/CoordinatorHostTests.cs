@@ -48,30 +48,41 @@ public class CoordinatorHostTests
     }
 
     [Fact]
-    public async Task ConfiguredBootstrapSolarSystemIsPublished()
+    public async Task ConfiguredBootstrapSolarSystemsArePublished()
     {
         await using var factory = new CoordinatorWebApplicationFactory()
             .WithWebHostBuilder(builder => builder
-                .UseSetting("Coordinator:BootstrapSolarSystem:Enabled", "true")
-                .UseSetting("Coordinator:BootstrapSolarSystem:SolarSystemId", "30002780")
-                .UseSetting("Coordinator:BootstrapSolarSystem:OwnerNodeId", "worker-local")
-                .UseSetting("Coordinator:BootstrapSolarSystem:Epoch", "11")
-                .UseSetting("Coordinator:BootstrapSolarSystem:Endpoint", "http://127.0.0.1:5199"));
+                .UseSetting("Coordinator:BootstrapSolarSystems:Enabled", "true")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:SolarSystemId", "30002780")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:OwnerNodeId", "worker-local")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:Epoch", "11")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:0:Endpoint", "http://127.0.0.1:5199")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:SolarSystemId", "30000142")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:OwnerNodeId", "worker-local")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:Epoch", "13")
+                .UseSetting("Coordinator:BootstrapSolarSystems:Assignments:1:Endpoint", "http://127.0.0.1:5199"));
         using GrpcChannel channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions
         {
             HttpHandler = factory.Server.CreateHandler(),
         });
         var client = new ClusterDirectory.ClusterDirectoryClient(channel);
 
-        ResolvePartitionResponse response = await client.ResolvePartitionAsync(new ResolvePartitionRequest
+        ResolvePartitionResponse first = await client.ResolvePartitionAsync(new ResolvePartitionRequest
         {
             Kind = (int)PartitionKind.SolarSystem,
             Key = "30002780",
         });
+        ResolvePartitionResponse second = await client.ResolvePartitionAsync(new ResolvePartitionRequest
+        {
+            Kind = (int)PartitionKind.SolarSystem,
+            Key = "30000142",
+        });
 
-        Assert.True(response.Found);
-        Assert.Equal("worker-local", response.OwnerNodeId);
-        Assert.Equal(11ul, response.Epoch);
-        Assert.Equal("http://127.0.0.1:5199/", response.Endpoint);
+        Assert.True(first.Found);
+        Assert.Equal("worker-local", first.OwnerNodeId);
+        Assert.Equal(11ul, first.Epoch);
+        Assert.Equal("http://127.0.0.1:5199/", first.Endpoint);
+        Assert.True(second.Found);
+        Assert.Equal(13ul, second.Epoch);
     }
 }

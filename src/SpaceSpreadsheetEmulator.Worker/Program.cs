@@ -11,6 +11,7 @@ using SpaceSpreadsheetEmulator.Simulation.Runtime;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddOptions<WorkerLoginOptions>()
     .Bind(builder.Configuration.GetSection("Worker:Login"))
     .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.ArtifactDirectory),
@@ -23,12 +24,10 @@ builder.Services.AddOptions<WorkerSolarSystemOptions>()
     .Bind(builder.Configuration.GetSection("Worker:SolarSystem"))
     .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.NodeId),
         "Worker solar-system ownership requires a node identifier.")
-    .Validate(options => !options.Enabled || options.SolarSystemId > 0,
-        "Worker solar-system ownership requires a positive solar-system identifier.")
-    .Validate(options => !options.Enabled || options.Epoch > 0,
-        "Worker solar-system ownership requires a positive epoch.")
     .Validate(options => options.CommandQueueCapacity > 0,
         "Worker solar-system command queue capacity must be positive.")
+    .Validate(options => options.HasValidAssignments(),
+        "Worker solar-system assignments require unique positive system IDs and epochs plus unique finite station entry points.")
     .ValidateOnStart();
 
 WorkerLoginOptions loginOptions = builder.Configuration.GetSection("Worker:Login").Get<WorkerLoginOptions>()
@@ -38,6 +37,11 @@ WorkerSolarSystemOptions solarOptions = builder.Configuration.GetSection("Worker
 if (solarOptions.Enabled && !loginOptions.Enabled)
 {
     throw new InvalidOperationException("The WIP solar-system slice requires Worker login sessions to be enabled.");
+}
+
+if (solarOptions.Enabled && !solarOptions.HasValidAssignments())
+{
+    throw new InvalidDataException("Worker solar-system assignments are invalid.");
 }
 
 if (loginOptions.Enabled)
@@ -56,20 +60,30 @@ if (loginOptions.Enabled)
     builder.Services.AddSingleton<IAccountAuthenticator>(new InMemoryAccountAuthenticator(
         loginOptions.DevelopmentEnrollmentEnabled,
         loginOptions.MaximumAccounts));
-    builder.Services.AddSingleton(TimeProvider.System);
     builder.Services.AddSingleton<ICharacterSelectionQuery, CharacterSelectionQuery>();
     builder.Services.AddSingleton<LoginTicketRegistry>();
 }
 
 if (solarOptions.Enabled)
 {
-    builder.Services.AddSingleton<ISolarSystemRuntime>(new SolarSystemRuntime(
-        new SolarSystemRuntimeContext(
-            new SolarSystemId(solarOptions.SolarSystemId),
-            new NodeId(solarOptions.NodeId),
-            new SimulationEpoch(solarOptions.Epoch)),
-        solarOptions.CommandQueueCapacity));
+    var ownerNodeId = new NodeId(solarOptions.NodeId);
+    ISolarSystemRuntime[] configuredRuntimes = solarOptions.Assignments
+        .Select(assignment => (ISolarSystemRuntime)new SolarSystemRuntime(
+            new SolarSystemRuntimeContext(
+                new SolarSystemId(assignment.SolarSystemId),
+                ownerNodeId,
+                new SimulationEpoch(assignment.Epoch)),
+            solarOptions.CommandQueueCapacity,
+            new PeriodicSimulationTickSource(TimeProvider.System, TimeSpan.FromSeconds(1))))
+        .ToArray();
+    builder.Services.AddSingleton<ISolarSystemRuntimeRegistry>(
+        new SolarSystemRuntimeRegistry(configuredRuntimes));
+    builder.Services.AddSingleton<ISolarSystemEntryPointResolver>(
+        new ConfiguredSolarSystemEntryPointResolver(solarOptions.Assignments));
+    builder.Services.AddSingleton<SolarSystemRequestResolver>();
     builder.Services.AddHostedService<SolarSystemRuntimeHostedService>();
+    builder.Services.AddHealthChecks()
+        .AddCheck<SolarSystemRuntimeHealthCheck>("solar-system-runtimes");
 }
 
 var app = builder.Build();

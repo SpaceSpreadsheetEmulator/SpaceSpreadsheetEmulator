@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -21,6 +22,11 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Gateway/SpaceSpreadsheetEmulator.Gateway.csproj" />
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.StaticData/SpaceSpreadsheetEmulator.StaticData.csproj" />
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Coordinator/SpaceSpreadsheetEmulator.Coordinator.csproj"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Worker/SpaceSpreadsheetEmulator.Worker.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

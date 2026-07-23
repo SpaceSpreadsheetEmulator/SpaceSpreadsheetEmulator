@@ -5,17 +5,24 @@ namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 
 public sealed class SolarSystemRuntime : ISolarSystemRuntime
 {
-    private readonly Channel<MutationCommand> commands;
-    private readonly Dictionary<CharacterId, SolarCharacterLocation> characters = [];
+    private readonly Channel<RuntimeCommand> commands;
+    private readonly ISimulationTickSource tickSource;
+    private readonly SolarSystemState state;
     private int runState;
 
-    public SolarSystemRuntime(SolarSystemRuntimeContext context, int commandQueueCapacity)
+    public SolarSystemRuntime(
+        SolarSystemRuntimeContext context,
+        int commandQueueCapacity,
+        ISimulationTickSource tickSource)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(commandQueueCapacity);
+        ArgumentNullException.ThrowIfNull(tickSource);
 
         Context = context;
-        commands = Channel.CreateBounded<MutationCommand>(new BoundedChannelOptions(commandQueueCapacity)
+        this.tickSource = tickSource;
+        state = new SolarSystemState(context);
+        commands = Channel.CreateBounded<RuntimeCommand>(new BoundedChannelOptions(commandQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -25,11 +32,14 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
 
     public SolarSystemRuntimeContext Context { get; }
 
-    public Task<SolarCharacterLocation> UndockAsync(
+    public SolarSystemRuntimeStatus Status => (SolarSystemRuntimeStatus)Volatile.Read(ref runState);
+
+    public Task<SolarShipState> UndockAsync(
         SolarCharacter character,
+        SolarVector3 entryPosition,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken = default)
-        => SubmitAsync(new UndockCommand(character, expectedEpoch, cancellationToken), cancellationToken);
+        => SubmitAsync(new UndockCommand(character, entryPosition, expectedEpoch, cancellationToken), cancellationToken);
 
     public Task<SolarCharacterLocation> DockAsync(
         SolarCharacter character,
@@ -38,16 +48,35 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         CancellationToken cancellationToken = default)
         => SubmitAsync(new DockCommand(character, stationId, expectedEpoch, cancellationToken), cancellationToken);
 
+    public Task<SolarShipState> SetVelocityAsync(
+        SolarCharacter character,
+        SolarVector3 velocity,
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken = default)
+        => SubmitAsync(new SetVelocityCommand(character, velocity, expectedEpoch, cancellationToken), cancellationToken);
+
+    public Task<SolarShipState?> GetShipStateAsync(
+        CharacterId characterId,
+        long shipId,
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken = default)
+        => SubmitAsync(new GetShipStateCommand(characterId, shipId, expectedEpoch, cancellationToken), cancellationToken);
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        if (Interlocked.CompareExchange(ref runState, 1, 0) != 0)
+        if (Interlocked.CompareExchange(
+                ref runState,
+                (int)SolarSystemRuntimeStatus.Running,
+                (int)SolarSystemRuntimeStatus.Created) != (int)SolarSystemRuntimeStatus.Created)
         {
             throw new InvalidOperationException("A solar-system runtime may have only one command consumer.");
         }
 
+        using var runtimeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task tickProducer = ProduceTicksAsync(runtimeCancellation.Token);
         try
         {
-            await foreach (MutationCommand command in commands.Reader.ReadAllAsync(cancellationToken))
+            await foreach (RuntimeCommand command in commands.Reader.ReadAllAsync(runtimeCancellation.Token))
             {
                 if (command.CancellationToken.IsCancellationRequested)
                 {
@@ -55,33 +84,55 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
                     continue;
                 }
 
-                try
-                {
-                    command.Complete(Apply(command));
-                }
-                catch (Exception error) when (error is ArgumentException or InvalidOperationException)
-                {
-                    command.Fail(error);
-                }
+                command.Execute(state);
             }
+
+            Volatile.Write(ref runState, (int)SolarSystemRuntimeStatus.Stopped);
+        }
+        catch (OperationCanceledException) when (runtimeCancellation.IsCancellationRequested)
+        {
+            Volatile.Write(ref runState, (int)SolarSystemRuntimeStatus.Stopped);
+        }
+        catch
+        {
+            Volatile.Write(ref runState, (int)SolarSystemRuntimeStatus.Faulted);
+            throw;
         }
         finally
         {
+            runtimeCancellation.Cancel();
             commands.Writer.TryComplete();
-            while (commands.Reader.TryRead(out MutationCommand? pending))
+            while (commands.Reader.TryRead(out RuntimeCommand? pending))
             {
                 pending.Cancel(cancellationToken);
             }
 
-            Volatile.Write(ref runState, 2);
+            try
+            {
+                await tickProducer;
+            }
+            catch (OperationCanceledException) when (runtimeCancellation.IsCancellationRequested)
+            {
+            }
+
+            await tickSource.DisposeAsync();
         }
     }
 
-    private async Task<SolarCharacterLocation> SubmitAsync(
-        MutationCommand command,
+    private async Task ProduceTicksAsync(CancellationToken cancellationToken)
+    {
+        while (await tickSource.WaitForNextTickAsync(cancellationToken))
+        {
+            await commands.Writer.WriteAsync(new TickCommand(cancellationToken), cancellationToken);
+        }
+    }
+
+    private async Task<TResult> SubmitAsync<TResult>(
+        ResultCommand<TResult> command,
         CancellationToken cancellationToken)
     {
-        if (Volatile.Read(ref runState) == 2)
+        SolarSystemRuntimeStatus status = Status;
+        if (status is SolarSystemRuntimeStatus.Stopped or SolarSystemRuntimeStatus.Faulted)
         {
             throw new InvalidOperationException("The solar-system runtime has stopped.");
         }
@@ -90,119 +141,95 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         return await command.Completion.Task.WaitAsync(cancellationToken);
     }
 
-    private SolarCharacterLocation Apply(MutationCommand command)
+    private abstract class RuntimeCommand(CancellationToken cancellationToken)
     {
-        Validate(command.Character, command.ExpectedEpoch);
-        return command switch
-        {
-            UndockCommand => ApplyUndock(command.Character),
-            DockCommand dock => ApplyDock(command.Character, dock.StationId),
-            _ => throw new InvalidOperationException("The solar-system mutation is unsupported."),
-        };
-    }
-
-    private SolarCharacterLocation ApplyUndock(SolarCharacter character)
-    {
-        if (characters.TryGetValue(character.CharacterId, out SolarCharacterLocation? current)
-            && current.ShipId != character.ShipId)
-        {
-            throw new InvalidOperationException("The selected character is already associated with another ship.");
-        }
-
-        return SetLocation(character, stationId: null);
-    }
-
-    private SolarCharacterLocation ApplyDock(SolarCharacter character, int stationId)
-    {
-        if (stationId <= 0)
-        {
-            throw new InvalidOperationException("A docking station identifier must be positive.");
-        }
-
-        if (!characters.TryGetValue(character.CharacterId, out SolarCharacterLocation? current))
-        {
-            throw new InvalidOperationException("The character must be in this solar system before docking.");
-        }
-
-        if (current.ShipId != character.ShipId)
-        {
-            throw new InvalidOperationException("The selected character is already associated with another ship.");
-        }
-
-        if (current.StationId is int currentStationId && currentStationId != stationId)
-        {
-            throw new InvalidOperationException("The character is already docked at another station.");
-        }
-
-        return current.StationId == stationId ? current : SetLocation(character, stationId);
-    }
-
-    private SolarCharacterLocation SetLocation(SolarCharacter character, int? stationId)
-    {
-        var location = new SolarCharacterLocation(
-            character.CharacterId,
-            character.ShipId,
-            character.SolarSystemId,
-            stationId,
-            Context.Epoch);
-        characters[character.CharacterId] = location;
-        return location;
-    }
-
-    private void Validate(SolarCharacter character, SimulationEpoch expectedEpoch)
-    {
-        ArgumentNullException.ThrowIfNull(character);
-        if (expectedEpoch != Context.Epoch)
-        {
-            throw new InvalidOperationException("The solar-system ownership epoch is stale.");
-        }
-
-        if (character.SolarSystemId != Context.SolarSystemId)
-        {
-            throw new InvalidOperationException("The character is routed to a different solar system.");
-        }
-
-        if (character.ShipId <= 0)
-        {
-            throw new InvalidOperationException("A ship identifier must be positive.");
-        }
-    }
-
-    private abstract class MutationCommand(
-        SolarCharacter character,
-        SimulationEpoch expectedEpoch,
-        CancellationToken cancellationToken)
-    {
-        public SolarCharacter Character { get; } = character;
-
-        public SimulationEpoch ExpectedEpoch { get; } = expectedEpoch;
-
         public CancellationToken CancellationToken { get; } = cancellationToken;
 
-        public TaskCompletionSource<SolarCharacterLocation> Completion { get; } =
+        public abstract void Execute(SolarSystemState state);
+
+        public abstract void Cancel(CancellationToken cancellationToken);
+    }
+
+    private abstract class ResultCommand<TResult>(CancellationToken cancellationToken)
+        : RuntimeCommand(cancellationToken)
+    {
+        public TaskCompletionSource<TResult> Completion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public void Complete(SolarCharacterLocation location) => Completion.TrySetResult(location);
+        public sealed override void Execute(SolarSystemState state)
+        {
+            try
+            {
+                Completion.TrySetResult(Apply(state));
+            }
+            catch (Exception error) when (
+                error is ArgumentException or InvalidOperationException or OverflowException)
+            {
+                Completion.TrySetException(error);
+            }
+            catch (Exception error)
+            {
+                Completion.TrySetException(error);
+                throw;
+            }
+        }
 
-        public void Fail(Exception error) => Completion.TrySetException(error);
-
-        public void Cancel(CancellationToken cancellationToken = default)
+        public override void Cancel(CancellationToken cancellationToken)
             => Completion.TrySetCanceled(cancellationToken);
+
+        protected abstract TResult Apply(SolarSystemState state);
     }
 
     private sealed class UndockCommand(
         SolarCharacter character,
+        SolarVector3 entryPosition,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken)
-        : MutationCommand(character, expectedEpoch, cancellationToken);
+        : ResultCommand<SolarShipState>(cancellationToken)
+    {
+        protected override SolarShipState Apply(SolarSystemState state)
+            => state.Undock(character, entryPosition, expectedEpoch);
+    }
 
     private sealed class DockCommand(
         SolarCharacter character,
         int stationId,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken)
-        : MutationCommand(character, expectedEpoch, cancellationToken)
+        : ResultCommand<SolarCharacterLocation>(cancellationToken)
     {
-        public int StationId { get; } = stationId;
+        protected override SolarCharacterLocation Apply(SolarSystemState state)
+            => state.Dock(character, stationId, expectedEpoch);
+    }
+
+    private sealed class SetVelocityCommand(
+        SolarCharacter character,
+        SolarVector3 velocity,
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken)
+        : ResultCommand<SolarShipState>(cancellationToken)
+    {
+        protected override SolarShipState Apply(SolarSystemState state)
+            => state.SetVelocity(character, velocity, expectedEpoch);
+    }
+
+    private sealed class GetShipStateCommand(
+        CharacterId characterId,
+        long shipId,
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken)
+        : ResultCommand<SolarShipState?>(cancellationToken)
+    {
+        protected override SolarShipState? Apply(SolarSystemState state)
+            => state.GetShipState(characterId, shipId, expectedEpoch);
+    }
+
+    private sealed class TickCommand(CancellationToken cancellationToken) : RuntimeCommand(cancellationToken)
+    {
+        public override void Execute(SolarSystemState state) => state.AdvanceTick();
+
+        public override void Cancel(CancellationToken cancellationToken)
+        {
+        }
     }
 }

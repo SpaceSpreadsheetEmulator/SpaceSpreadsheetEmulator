@@ -1,100 +1,250 @@
 using Grpc.Core;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
-using SpaceSpreadsheetEmulator.Gameplay.Characters;
-using SpaceSpreadsheetEmulator.Identity.Authentication;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
-using SpaceSpreadsheetEmulator.Worker.Login;
-using GameplayCharacterSummary = SpaceSpreadsheetEmulator.Gameplay.Characters.CharacterSummary;
+using ContractShipState = SpaceSpreadsheetEmulator.Backplane.Contracts.V1.SolarShipState;
+using ContractVector3 = SpaceSpreadsheetEmulator.Backplane.Contracts.V1.SolarVector3;
+using RuntimeShipState = SpaceSpreadsheetEmulator.Simulation.Runtime.SolarShipState;
+using RuntimeVector3 = SpaceSpreadsheetEmulator.Simulation.Runtime.SolarVector3;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
-public sealed class SolarSystemGameplayGrpcService(
-    LoginTicketRegistry tickets,
-    ICharacterSelectionQuery characterSelection,
-    ISolarSystemRuntime runtime) : SolarSystemGameplay.SolarSystemGameplayBase
+internal sealed class SolarSystemGameplayGrpcService(
+    SolarSystemRequestResolver requestResolver,
+    ISolarSystemEntryPointResolver entryPoints) : SolarSystemGameplay.SolarSystemGameplayBase
 {
-    public override Task<SolarSystemMutationResponse> Undock(
+    public override async Task<SolarSystemMutationResponse> Undock(
         SolarSystemMutationRequest request,
         ServerCallContext context)
-        => MutateAsync(request, dock: false, context.CancellationToken);
-
-    public override Task<SolarSystemMutationResponse> Dock(
-        SolarSystemMutationRequest request,
-        ServerCallContext context)
-        => MutateAsync(request, dock: true, context.CancellationToken);
-
-    private async Task<SolarSystemMutationResponse> MutateAsync(
-        SolarSystemMutationRequest request,
-        bool dock,
-        CancellationToken cancellationToken)
     {
-        if (!BackplaneRequestValidator.TryValidateContext(
-                request.Context,
-                out NodeId gatewayId,
-                out GatewaySessionId sessionId)
-            || !tickets.TryResolve(request.LoginTicket.Span, gatewayId, sessionId, out AuthenticatedAccount? account))
+        SolarSystemRequestResolution resolution = await requestResolver.ResolveAsync(
+            request.Context,
+            request.LoginTicket,
+            request.OwnerNodeId,
+            request.ExpectedEpoch,
+            request.SolarSystemId,
+            request.CharacterId,
+            request.ShipId,
+            context.CancellationToken);
+        if (resolution.Error is not null)
         {
-            return Failure("identity.invalid_session", "The login session is invalid or expired.");
+            return MutationFailure(resolution.Error);
         }
 
-        SolarSystemRuntimeContext owner = runtime.Context;
-        if (!string.Equals(request.OwnerNodeId, owner.OwnerNodeId.Value, StringComparison.Ordinal)
-            || request.ExpectedEpoch != owner.Epoch.Value
-            || request.SolarSystemId != owner.SolarSystemId.Value)
+        if (resolution.Character!.StationId != request.StationId)
         {
-            return Failure("simulation.stale_route", "The solar-system ownership route is stale.");
+            return MutationFailure(Error(
+                "gameplay.character_mismatch",
+                "The character does not belong to the requested station."));
         }
 
-        CharacterSelection selection = await characterSelection.ExecuteAsync(account!, cancellationToken);
-        GameplayCharacterSummary? selected = selection.Characters.SingleOrDefault(character =>
-            character.CharacterId.Value == request.CharacterId
-            && character.ShipId == request.ShipId
-            && character.StationId == request.StationId
-            && character.SolarSystemId == request.SolarSystemId);
-        if (selected is null)
+        if (!entryPoints.TryResolve(
+                resolution.Runtime!.Context.SolarSystemId,
+                request.StationId,
+                out RuntimeVector3 entryPoint))
         {
-            return Failure("gameplay.character_mismatch", "The character does not belong to this login session.");
+            return MutationFailure(Error(
+                "simulation.entry_point_missing",
+                "The requested station has no configured solar-system entry point."));
         }
 
         try
         {
-            var character = new SolarCharacter(
-                selected.CharacterId,
-                selected.ShipId,
-                new SolarSystemId(selected.SolarSystemId));
-            var expectedEpoch = new SimulationEpoch(request.ExpectedEpoch);
-            SolarCharacterLocation location = dock
-                ? await runtime.DockAsync(character, selected.StationId, expectedEpoch, cancellationToken)
-                : await runtime.UndockAsync(character, expectedEpoch, cancellationToken);
-            return Success(location, owner.OwnerNodeId);
+            RuntimeShipState state = await resolution.Runtime.UndockAsync(
+                resolution.SolarCharacter!,
+                entryPoint,
+                resolution.Runtime.Context.Epoch,
+                context.CancellationToken);
+            return MutationSuccess(state, resolution.Runtime.Context.OwnerNodeId, stationId: null);
         }
         catch (InvalidOperationException error)
         {
-            return Failure("simulation.mutation_rejected", error.Message);
+            return MutationFailure(Error("simulation.mutation_rejected", error.Message));
         }
     }
 
-    private static SolarSystemMutationResponse Success(
-        SolarCharacterLocation location,
-        NodeId ownerNodeId)
+    public override async Task<SolarSystemMutationResponse> Dock(
+        SolarSystemMutationRequest request,
+        ServerCallContext context)
+    {
+        SolarSystemRequestResolution resolution = await requestResolver.ResolveAsync(
+            request.Context,
+            request.LoginTicket,
+            request.OwnerNodeId,
+            request.ExpectedEpoch,
+            request.SolarSystemId,
+            request.CharacterId,
+            request.ShipId,
+            context.CancellationToken);
+        if (resolution.Error is not null)
+        {
+            return MutationFailure(resolution.Error);
+        }
+
+        if (resolution.Character!.StationId != request.StationId)
+        {
+            return MutationFailure(Error(
+                "gameplay.character_mismatch",
+                "The character does not belong to the requested station."));
+        }
+
+        try
+        {
+            SolarCharacterLocation location = await resolution.Runtime!.DockAsync(
+                resolution.SolarCharacter!,
+                request.StationId,
+                resolution.Runtime.Context.Epoch,
+                context.CancellationToken);
+            return new SolarSystemMutationResponse
+            {
+                OwnerNodeId = resolution.Runtime.Context.OwnerNodeId.Value,
+                Epoch = location.Epoch.Value,
+                SolarSystemId = location.SolarSystemId.Value,
+                CharacterId = location.CharacterId.Value,
+                ShipId = location.ShipId,
+                StationId = location.StationId!.Value,
+            };
+        }
+        catch (InvalidOperationException error)
+        {
+            return MutationFailure(Error("simulation.mutation_rejected", error.Message));
+        }
+    }
+
+    public override async Task<SolarShipStateResponse> SetVelocity(
+        SolarSystemVelocityRequest request,
+        ServerCallContext context)
+    {
+        SolarSystemRequestResolution resolution = await requestResolver.ResolveAsync(
+            request.Context,
+            request.LoginTicket,
+            request.OwnerNodeId,
+            request.ExpectedEpoch,
+            request.SolarSystemId,
+            request.CharacterId,
+            request.ShipId,
+            context.CancellationToken);
+        if (resolution.Error is not null)
+        {
+            return StateFailure(resolution.Error);
+        }
+
+        if (request.Velocity is null)
+        {
+            return StateFailure(Error("simulation.invalid_vector", "A velocity vector is required."));
+        }
+
+        RuntimeVector3 velocity;
+        try
+        {
+            velocity = new RuntimeVector3(request.Velocity.X, request.Velocity.Y, request.Velocity.Z);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return StateFailure(Error(
+                "simulation.invalid_vector",
+                "Velocity components must be finite numbers."));
+        }
+
+        try
+        {
+            RuntimeShipState state = await resolution.Runtime!.SetVelocityAsync(
+                resolution.SolarCharacter!,
+                velocity,
+                resolution.Runtime.Context.Epoch,
+                context.CancellationToken);
+            return StateSuccess(state);
+        }
+        catch (InvalidOperationException error)
+        {
+            return StateFailure(Error("simulation.mutation_rejected", error.Message));
+        }
+    }
+
+    public override async Task<SolarShipStateResponse> GetShipState(
+        SolarShipStateRequest request,
+        ServerCallContext context)
+    {
+        SolarSystemRequestResolution resolution = await requestResolver.ResolveAsync(
+            request.Context,
+            request.LoginTicket,
+            request.OwnerNodeId,
+            request.ExpectedEpoch,
+            request.SolarSystemId,
+            request.CharacterId,
+            request.ShipId,
+            context.CancellationToken);
+        if (resolution.Error is not null)
+        {
+            return StateFailure(resolution.Error);
+        }
+
+        try
+        {
+            RuntimeShipState? state = await resolution.Runtime!.GetShipStateAsync(
+                resolution.Character!.CharacterId,
+                resolution.Character.ShipId,
+                resolution.Runtime.Context.Epoch,
+                context.CancellationToken);
+            return state is null
+                ? StateFailure(Error(
+                    "simulation.entity_not_found",
+                    "The requested ship is not present in this solar system."))
+                : StateSuccess(state);
+        }
+        catch (InvalidOperationException error)
+        {
+            return StateFailure(Error("simulation.query_rejected", error.Message));
+        }
+    }
+
+    private static SolarSystemMutationResponse MutationSuccess(
+        RuntimeShipState state,
+        NodeId ownerNodeId,
+        int? stationId)
     {
         var response = new SolarSystemMutationResponse
         {
             OwnerNodeId = ownerNodeId.Value,
-            Epoch = location.Epoch.Value,
-            SolarSystemId = location.SolarSystemId.Value,
-            CharacterId = location.CharacterId.Value,
-            ShipId = location.ShipId,
+            Epoch = state.Epoch.Value,
+            SolarSystemId = state.SolarSystemId.Value,
+            CharacterId = state.CharacterId.Value,
+            ShipId = state.ShipId,
+            ShipState = Map(state),
         };
-        if (location.StationId is int stationId)
+        if (stationId is int value)
         {
-            response.StationId = stationId;
+            response.StationId = value;
         }
 
         return response;
     }
 
-    private static SolarSystemMutationResponse Failure(string code, string message)
-        => new() { Error = new ServiceError { Code = code, Message = message } };
+    private static SolarShipStateResponse StateSuccess(RuntimeShipState state)
+        => new() { ShipState = Map(state) };
+
+    private static ContractShipState Map(RuntimeShipState state)
+        => new()
+        {
+            CharacterId = state.CharacterId.Value,
+            ShipId = state.ShipId,
+            SolarSystemId = state.SolarSystemId.Value,
+            Epoch = state.Epoch.Value,
+            Tick = state.Tick,
+            Position = Map(state.Position),
+            Velocity = Map(state.Velocity),
+        };
+
+    private static ContractVector3 Map(RuntimeVector3 vector)
+        => new() { X = vector.X, Y = vector.Y, Z = vector.Z };
+
+    private static SolarSystemMutationResponse MutationFailure(ServiceError error)
+        => new() { Error = error };
+
+    private static SolarShipStateResponse StateFailure(ServiceError error)
+        => new() { Error = error };
+
+    private static ServiceError Error(string code, string message)
+        => new() { Code = code, Message = message };
+
 }
