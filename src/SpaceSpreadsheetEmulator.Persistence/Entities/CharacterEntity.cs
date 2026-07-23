@@ -18,7 +18,7 @@ internal sealed class CharacterEntity
 
     public int CorporationId { get; set; }
 
-    public int StationId { get; set; }
+    public int? StationId { get; set; }
 
     public int SolarSystemId { get; set; }
 

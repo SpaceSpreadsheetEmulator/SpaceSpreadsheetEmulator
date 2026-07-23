@@ -35,6 +35,8 @@ public interface ISolarSystemBackend
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken);
 
     Task<SolarSystemTransition?> DockAsync(
@@ -42,5 +44,7 @@ public interface ISolarSystemBackend
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken);
 }

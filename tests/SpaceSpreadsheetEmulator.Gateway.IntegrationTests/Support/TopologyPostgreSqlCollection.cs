@@ -34,4 +34,24 @@ public sealed class TopologyPostgreSqlFixture : IAsyncLifetime
     }
 
     public async Task DisposeAsync() => await container.DisposeAsync();
+
+    public async Task ResetAsync()
+    {
+        var registrations = new ServiceCollection();
+        registrations.AddGamePersistence(ConnectionString);
+        await using ServiceProvider services = registrations.BuildServiceProvider();
+        IDbContextFactory<GameDbContext> factory =
+            services.GetRequiredService<IDbContextFactory<GameDbContext>>();
+        await using GameDbContext context = await factory.CreateDbContextAsync();
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            TRUNCATE TABLE
+                operations.character_location_transitions,
+                simulation.solar_system_snapshots,
+                characters.characters,
+                inventory.items,
+                identity.accounts
+            CASCADE
+            """);
+    }
 }

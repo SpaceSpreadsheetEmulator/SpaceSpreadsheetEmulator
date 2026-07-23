@@ -11,6 +11,12 @@ internal sealed class GameDbContext(DbContextOptions<GameDbContext> options) : D
 
     public DbSet<InventoryItemEntity> Items => Set<InventoryItemEntity>();
 
+    public DbSet<CharacterLocationTransitionEntity> CharacterLocationTransitions =>
+        Set<CharacterLocationTransitionEntity>();
+
+    public DbSet<SolarSystemSnapshotEntity> SolarSystemSnapshots =>
+        Set<SolarSystemSnapshotEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasSequence<long>("account_ids", "identity")
@@ -26,6 +32,8 @@ internal sealed class GameDbContext(DbContextOptions<GameDbContext> options) : D
         ConfigureAccounts(modelBuilder);
         ConfigureCharacters(modelBuilder);
         ConfigureItems(modelBuilder);
+        ConfigureCharacterLocationTransitions(modelBuilder);
+        ConfigureSolarSystemSnapshots(modelBuilder);
     }
 
     private static void ConfigureAccounts(ModelBuilder modelBuilder)
@@ -71,7 +79,8 @@ internal sealed class GameDbContext(DbContextOptions<GameDbContext> options) : D
                 "race_id > 0 AND bloodline_id > 0 AND ancestry_id > 0 "
                 + "AND character_type_id > 0 AND corporation_id > 0");
             table.HasCheckConstraint("ck_characters_location_ids_positive",
-                "station_id > 0 AND solar_system_id > 0 AND constellation_id > 0 AND region_id > 0");
+                "(station_id IS NULL OR station_id > 0) "
+                + "AND solar_system_id > 0 AND constellation_id > 0 AND region_id > 0");
             table.HasCheckConstraint("ck_characters_active_ship_positive", "active_ship_item_id > 0");
             table.HasCheckConstraint("ck_characters_version_positive", "version > 0");
         });
@@ -163,5 +172,70 @@ internal sealed class GameDbContext(DbContextOptions<GameDbContext> options) : D
             entity.Flag,
         })
             .HasDatabaseName("ix_items_location_flag");
+    }
+
+    private static void ConfigureCharacterLocationTransitions(ModelBuilder modelBuilder)
+    {
+        var transition = modelBuilder.Entity<CharacterLocationTransitionEntity>();
+        transition.ToTable("character_location_transitions", "operations", table =>
+        {
+            table.HasCheckConstraint("ck_character_location_transitions_kind", "kind IN (1, 2)");
+            table.HasCheckConstraint(
+                "ck_character_location_transitions_positive_ids",
+                "account_id > 0 AND character_id > 0 AND ship_id > 0 AND solar_system_id > 0");
+            table.HasCheckConstraint(
+                "ck_character_location_transitions_versions",
+                "resulting_character_version > 0 AND resulting_ship_version > 0");
+            table.HasCheckConstraint(
+                "ck_character_location_transitions_station",
+                "station_id IS NULL OR station_id > 0");
+        });
+        transition.HasKey(entity => entity.IdempotencyKey);
+        transition.Property(entity => entity.IdempotencyKey)
+            .HasColumnName("idempotency_key")
+            .HasMaxLength(100);
+        transition.Property(entity => entity.Kind).HasColumnName("kind");
+        transition.Property(entity => entity.AccountId).HasColumnName("account_id");
+        transition.Property(entity => entity.CharacterId).HasColumnName("character_id");
+        transition.Property(entity => entity.ShipId).HasColumnName("ship_id");
+        transition.Property(entity => entity.SolarSystemId).HasColumnName("solar_system_id");
+        transition.Property(entity => entity.StationId).HasColumnName("station_id");
+        transition.Property(entity => entity.ResultingCharacterVersion)
+            .HasColumnName("resulting_character_version");
+        transition.Property(entity => entity.ResultingShipVersion)
+            .HasColumnName("resulting_ship_version");
+        transition.Property(entity => entity.CreatedAt).HasColumnName("created_at");
+        transition.HasIndex(entity => new { entity.CharacterId, entity.ResultingCharacterVersion })
+            .IsUnique()
+            .HasDatabaseName("ux_character_location_transitions_character_version");
+    }
+
+    private static void ConfigureSolarSystemSnapshots(ModelBuilder modelBuilder)
+    {
+        var snapshot = modelBuilder.Entity<SolarSystemSnapshotEntity>();
+        snapshot.ToTable("solar_system_snapshots", "simulation", table =>
+        {
+            table.HasCheckConstraint("ck_solar_system_snapshots_system_id", "solar_system_id > 0");
+            table.HasCheckConstraint("ck_solar_system_snapshots_source_epoch", "source_epoch > 0");
+            table.HasCheckConstraint("ck_solar_system_snapshots_format_version", "format_version > 0");
+            table.HasCheckConstraint("ck_solar_system_snapshots_tick", "tick >= 0");
+            table.HasCheckConstraint("ck_solar_system_snapshots_last_sequence", "last_sequence >= 0");
+            table.HasCheckConstraint("ck_solar_system_snapshots_hash_length", "octet_length(payload_sha256) = 32");
+            table.HasCheckConstraint("ck_solar_system_snapshots_version", "version > 0");
+        });
+        snapshot.HasKey(entity => entity.SolarSystemId);
+        snapshot.Property(entity => entity.SolarSystemId)
+            .HasColumnName("solar_system_id")
+            .ValueGeneratedNever();
+        snapshot.Property(entity => entity.SourceEpoch).HasColumnName("source_epoch");
+        snapshot.Property(entity => entity.FormatVersion).HasColumnName("format_version");
+        snapshot.Property(entity => entity.Tick).HasColumnName("tick");
+        snapshot.Property(entity => entity.LastSequence).HasColumnName("last_sequence");
+        snapshot.Property(entity => entity.Payload).HasColumnName("payload");
+        snapshot.Property(entity => entity.PayloadSha256).HasColumnName("payload_sha256");
+        snapshot.Property(entity => entity.CreatedAt).HasColumnName("created_at");
+        snapshot.Property(entity => entity.Version)
+            .HasColumnName("version")
+            .IsConcurrencyToken();
     }
 }

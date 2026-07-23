@@ -125,7 +125,7 @@ internal sealed partial class GatewayClientConnection
                 ReadRequestedIds(request.Arguments))),
             "charUnboundMgr.SelectCharacterID" => SelectCharacter(request),
             "ship.MachoBindObject" => await UndockAsync(request, cancellationToken),
-            "beyonce.MachoBindObject" => BindSolarSystem(request),
+            "beyonce.MachoBindObject" => await BindSolarSystemAsync(request, cancellationToken),
             "bound.CmdDock" => await DockAsync(request, cancellationToken),
             _ => null,
         };
@@ -164,7 +164,9 @@ internal sealed partial class GatewayClientConnection
             ? Result(PyNull.Instance)
             : Result(
                 PyNull.Instance,
-                CreateSessionNotification(previousStationId: null, selectedCharacter.StationId));
+                CreateSessionNotification(
+                    previousStationId: null,
+                    selectedCharacter.HasStationId ? selectedCharacter.StationId : null));
     }
 
     private async Task<RpcDispatchResult> UndockAsync(
@@ -192,22 +194,27 @@ internal sealed partial class GatewayClientConnection
             gatewaySessionId,
             loginSession!.LoginTicket,
             selectedCharacter,
+            checked((int)stationId),
+            request.CallId,
             cancellationToken);
         if (transition is null)
         {
             return Result(PyNull.Instance);
         }
 
+        int? previousStationId = selectedCharacter.StationId;
+        ApplyTransition(transition);
         solarSystemBinding = $"N=solarsystem:{transition.SolarSystemId}:{transition.Epoch}";
         return Result(
             new PyText($"N=ship:{transition.ShipId}:{transition.Epoch}"),
-            CreateSessionNotification(selectedCharacter.StationId, stationId: null));
+            CreateSessionNotification(previousStationId, stationId: null));
     }
 
-    private RpcDispatchResult BindSolarSystem(MachoRpcRequest request)
+    private async Task<RpcDispatchResult> BindSolarSystemAsync(
+        MachoRpcRequest request,
+        CancellationToken cancellationToken)
     {
         if (selectedCharacter is null
-            || solarSystemBinding is null
             || request.Arguments.Items.Length == 0
             || !TryInteger(request.Arguments.Items[0], out long solarSystemId)
             || solarSystemId != selectedCharacter.SolarSystemId)
@@ -215,7 +222,22 @@ internal sealed partial class GatewayClientConnection
             return Result(PyNull.Instance);
         }
 
-        return Result(new PyText(solarSystemBinding));
+        if (solarSystemBinding is null && !selectedCharacter.HasStationId)
+        {
+            SolarSystemRoute? route = await solarSystemBackend.ResolveAsync(
+                selectedCharacter.SolarSystemId,
+                cancellationToken);
+            if (route is null)
+            {
+                return Result(PyNull.Instance);
+            }
+
+            solarSystemBinding = $"N=solarsystem:{route.SolarSystemId}:{route.Epoch}";
+        }
+
+        return solarSystemBinding is null
+            ? Result(PyNull.Instance)
+            : Result(new PyText(solarSystemBinding));
     }
 
     private async Task<RpcDispatchResult> DockAsync(
@@ -226,7 +248,7 @@ internal sealed partial class GatewayClientConnection
             || solarSystemBinding is null
             || !string.Equals(request.BoundObject, solarSystemBinding, StringComparison.Ordinal)
             || !TryReadDockArguments(request.Arguments, out long stationId, out long shipId)
-            || stationId != selectedCharacter.StationId
+            || selectedCharacter.HasStationId
             || shipId != selectedCharacter.ShipId)
         {
             return Result(PyNull.Instance);
@@ -245,12 +267,34 @@ internal sealed partial class GatewayClientConnection
             gatewaySessionId,
             loginSession!.LoginTicket,
             selectedCharacter,
+            checked((int)stationId),
+            request.CallId,
             cancellationToken);
-        return transition is null
-            ? Result(PyNull.Instance)
-            : Result(
-                PyNull.Instance,
-                CreateSessionNotification(previousStationId: null, transition.StationId));
+        if (transition is null)
+        {
+            return Result(PyNull.Instance);
+        }
+
+        ApplyTransition(transition);
+        solarSystemBinding = null;
+        return Result(
+            PyNull.Instance,
+            CreateSessionNotification(previousStationId: null, transition.StationId));
+    }
+
+    private void ApplyTransition(SolarSystemTransition transition)
+    {
+        CharacterSummary updated = selectedCharacter!.Clone();
+        if (transition.StationId is int stationId)
+        {
+            updated.StationId = stationId;
+        }
+        else
+        {
+            updated.ClearStationId();
+        }
+
+        selectedCharacter = updated;
     }
 
     private MachoPacket CreateSessionNotification(int? previousStationId, int? stationId)

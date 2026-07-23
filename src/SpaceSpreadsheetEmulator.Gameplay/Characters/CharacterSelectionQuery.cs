@@ -40,10 +40,12 @@ public sealed class CharacterSelectionQuery(
             StaticDataEntityKind.NpcCorporation,
             character.CorporationId,
             cancellationToken);
-        StaticDataRecord station = await RequiredAsync(
-            StaticDataEntityKind.NpcStation,
-            character.StationId,
-            cancellationToken);
+        StaticDataRecord? station = character.StationId is int stationId
+            ? await RequiredAsync(
+                StaticDataEntityKind.NpcStation,
+                stationId,
+                cancellationToken)
+            : null;
         StaticDataRecord system = await RequiredAsync(
             StaticDataEntityKind.SolarSystem,
             character.SolarSystemId,
@@ -60,7 +62,7 @@ public sealed class CharacterSelectionQuery(
                 character.CorporationId,
                 corporation.Name,
                 character.StationId,
-                station.Name,
+                station?.Name,
                 character.SolarSystemId,
                 system.Name,
                 character.ConstellationId,

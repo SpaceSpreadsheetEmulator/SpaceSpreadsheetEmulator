@@ -41,5 +41,24 @@ public class InMemoryPartitionDirectoryTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new PartitionKey((PartitionKind)99, "x"));
         Assert.Throws<ArgumentException>(() => new PartitionKey(PartitionKind.MarketRegion, ""));
+        Assert.Throws<ArgumentException>(() =>
+            new PartitionKey(
+                PartitionKind.MarketRegion,
+                new string('x', PartitionKey.MaximumValueLength + 1)));
+        Assert.Equal(
+            "MarketRegion:10000002",
+            new PartitionKey(PartitionKind.MarketRegion, "10000002").ToString());
+    }
+
+    [Fact]
+    public void AssignmentRequiresAnAbsoluteEndpoint()
+    {
+        var assignment = new PartitionAssignment(
+            new PartitionKey(PartitionKind.SolarSystem, "30000142"),
+            new NodeId("worker-a"),
+            new SimulationEpoch(3),
+            new Uri("/worker-a", UriKind.Relative));
+
+        Assert.Throws<ArgumentException>(() => assignment.Validate());
     }
 }

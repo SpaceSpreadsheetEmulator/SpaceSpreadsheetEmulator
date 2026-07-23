@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -79,16 +81,36 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken)
-        => MutateAsync(route, gatewaySessionId, loginTicket, character, dock: false, cancellationToken);
+        => MutateAsync(
+            route,
+            gatewaySessionId,
+            loginTicket,
+            character,
+            stationId,
+            clientCallId,
+            dock: false,
+            cancellationToken);
 
     public Task<SolarSystemTransition?> DockAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken)
-        => MutateAsync(route, gatewaySessionId, loginTicket, character, dock: true, cancellationToken);
+        => MutateAsync(
+            route,
+            gatewaySessionId,
+            loginTicket,
+            character,
+            stationId,
+            clientCallId,
+            dock: true,
+            cancellationToken);
 
     public void Dispose()
     {
@@ -104,6 +126,8 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         bool dock,
         CancellationToken cancellationToken)
     {
@@ -119,7 +143,11 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
             SolarSystemId = character.SolarSystemId,
             CharacterId = character.CharacterId,
             ShipId = character.ShipId,
-            StationId = character.StationId,
+            StationId = stationId,
+            IdempotencyKey = CreateIdempotencyKey(
+                gatewaySessionId,
+                clientCallId,
+                dock ? "dock" : "undock"),
         };
         SolarSystemMutationResponse response;
         try
@@ -157,6 +185,24 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
             CorrelationId = Guid.NewGuid().ToString("N"),
             ClientBuild = 3_396_210,
         };
+
+    private string CreateIdempotencyKey(
+        ulong gatewaySessionId,
+        long clientCallId,
+        string operation)
+    {
+        string material = string.Join(
+            '\u001f',
+            "sse-location-v1",
+            options.GatewayId,
+            gatewaySessionId.ToString(CultureInfo.InvariantCulture),
+            clientCallId.ToString(CultureInfo.InvariantCulture),
+            operation);
+        return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(material)))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
 
     private sealed record CachedRoute(SolarSystemRoute Route, DateTimeOffset ExpiresAt);
 

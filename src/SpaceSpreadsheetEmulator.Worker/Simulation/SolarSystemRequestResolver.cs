@@ -5,7 +5,6 @@ using SpaceSpreadsheetEmulator.Identity.Authentication;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
 using SpaceSpreadsheetEmulator.Worker.Login;
-using GameplayCharacterSummary = SpaceSpreadsheetEmulator.Gameplay.Characters.CharacterSummary;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
@@ -14,7 +13,7 @@ namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 /// </summary>
 internal sealed class SolarSystemRequestResolver(
     LoginTicketRegistry tickets,
-    ICharacterSelectionQuery characterSelection,
+    ICharacterStateReader characters,
     ISolarSystemRuntimeRegistry runtimes)
 {
     public async Task<SolarSystemRequestResolution> ResolveAsync(
@@ -55,11 +54,15 @@ internal sealed class SolarSystemRequestResolver(
                 "The solar-system ownership route is stale.");
         }
 
-        CharacterSelection selection = await characterSelection.ExecuteAsync(account!, cancellationToken);
-        GameplayCharacterSummary? selected = selection.Characters.SingleOrDefault(character =>
-            character.CharacterId.Value == characterId
-            && character.ShipId == shipId
-            && character.SolarSystemId == solarSystemId);
+        PlayableCharacterState? selected = await characters.FindAsync(
+            account!.AccountId,
+            new CharacterId(characterId),
+            cancellationToken);
+        if (selected is not null
+            && (selected.ShipId != shipId || selected.SolarSystemId != solarSystemId))
+        {
+            selected = null;
+        }
         if (selected is null)
         {
             return SolarSystemRequestResolution.Failed(
@@ -82,7 +85,7 @@ internal sealed class SolarSystemRequestResolver(
 /// </summary>
 internal sealed record SolarSystemRequestResolution(
     ISolarSystemRuntime? Runtime,
-    GameplayCharacterSummary? Character,
+    PlayableCharacterState? Character,
     SolarCharacter? SolarCharacter,
     ServiceError? Error)
 {
@@ -91,7 +94,7 @@ internal sealed record SolarSystemRequestResolution(
 
     public static SolarSystemRequestResolution Succeeded(
         ISolarSystemRuntime runtime,
-        GameplayCharacterSummary character,
+        PlayableCharacterState character,
         SolarCharacter solarCharacter)
         => new(runtime, character, solarCharacter, null);
 }

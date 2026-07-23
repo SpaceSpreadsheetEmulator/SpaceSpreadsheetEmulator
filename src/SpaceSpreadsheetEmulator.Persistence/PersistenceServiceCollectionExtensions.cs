@@ -7,6 +7,8 @@ using SpaceSpreadsheetEmulator.Identity.Authentication;
 using SpaceSpreadsheetEmulator.Persistence.Accounts;
 using SpaceSpreadsheetEmulator.Persistence.Characters;
 using SpaceSpreadsheetEmulator.Persistence.Database;
+using SpaceSpreadsheetEmulator.Persistence.Simulation;
+using SpaceSpreadsheetEmulator.Simulation.Runtime;
 
 namespace SpaceSpreadsheetEmulator.Persistence;
 
@@ -27,6 +29,14 @@ public static class PersistenceServiceCollectionExtensions
             GameDbContextConfiguration.Configure(options, connectionString));
         services.AddSingleton<IAccountIdentityStore, PostgreSqlAccountIdentityStore>();
         services.AddSingleton<IStarterCharacterStore, PostgreSqlStarterCharacterStore>();
+        services.AddSingleton<PostgreSqlCharacterStateStore>();
+        services.AddSingleton<ICharacterStateReader>(
+            services => services.GetRequiredService<PostgreSqlCharacterStateStore>());
+        services.AddSingleton<ICharacterLocationWriter>(
+            services => services.GetRequiredService<PostgreSqlCharacterStateStore>());
+        services.AddSingleton<ICharacterRuntimeRecoveryReader>(
+            services => services.GetRequiredService<PostgreSqlCharacterStateStore>());
+        services.AddSingleton<ISolarSystemSnapshotStore, PostgreSqlSolarSystemSnapshotStore>();
         services.AddSingleton<IGameDatabaseReadinessProbe, GameDatabaseReadinessProbe>();
         return services;
     }

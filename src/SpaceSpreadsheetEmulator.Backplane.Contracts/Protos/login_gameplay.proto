@@ -75,7 +75,7 @@ message CharacterSummary {
   int32 character_type_id = 6;
   int32 corporation_id = 7;
   string corporation_name = 8;
-  int32 station_id = 9;
+  optional int32 station_id = 9;
   string station_name = 10;
   int32 solar_system_id = 11;
   string solar_system_name = 12;

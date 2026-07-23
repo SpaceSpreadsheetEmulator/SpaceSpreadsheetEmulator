@@ -23,6 +23,7 @@ message SolarSystemMutationRequest {
   int64 character_id = 6;
   int64 ship_id = 7;
   int32 station_id = 8;
+  string idempotency_key = 9;
 }
 
 // Returns the authoritative character location produced by a solar-system transition.

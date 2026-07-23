@@ -35,5 +35,9 @@ public interface ISolarSystemRuntime
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken = default);
 
+    Task<SolarSystemSnapshot> CaptureSnapshotAsync(
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken = default);
+
     Task RunAsync(CancellationToken cancellationToken);
 }

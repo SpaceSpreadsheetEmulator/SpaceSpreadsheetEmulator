@@ -131,7 +131,9 @@ internal static class Build3396210CharacterSelectionMapper
             new PyInteger(0),
             new PyInteger(character.ShipTypeId),
             new PyInteger(character.SolarSystemId),
-            new PyInteger(character.StationId),
+            character.HasStationId
+                ? new PyInteger(character.StationId)
+                : PyNull.Instance,
             new PyFloat(0),
             new PyInteger(0),
             new PyInteger(0),
@@ -172,7 +174,7 @@ internal static class Build3396210CharacterSelectionMapper
                 || character.CorporationId <= 0
                 || character.ShipTypeId <= 0
                 || character.SolarSystemId <= 0
-                || character.StationId <= 0
+                || (character.HasStationId && character.StationId <= 0)
                 || character.ShipId <= 0
                 || character.LastLoginUnixMilliseconds is < 0 or > 253_402_300_799_999
                 || !decimal.TryParse(

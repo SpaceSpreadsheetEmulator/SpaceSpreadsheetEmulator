@@ -25,4 +25,13 @@ public class IdentifierTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new SimulationEpoch(0));
         Assert.Equal(2ul, new SimulationEpoch(1).Next().Value);
     }
+
+    [Fact]
+    public void CorrelationIdMustBeNonEmptyAndBounded()
+    {
+        Assert.Throws<ArgumentException>(() => new CorrelationId(""));
+        Assert.Throws<ArgumentException>(() =>
+            new CorrelationId(new string('x', CorrelationId.MaximumLength + 1)));
+        Assert.Equal("request-1", new CorrelationId("request-1").ToString());
+    }
 }

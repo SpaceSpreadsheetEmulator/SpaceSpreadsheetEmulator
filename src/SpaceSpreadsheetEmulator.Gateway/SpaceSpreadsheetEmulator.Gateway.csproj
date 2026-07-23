@@ -10,4 +10,7 @@
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Protocol/SpaceSpreadsheetEmulator.Protocol.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SpaceSpreadsheetEmulator.Gateway.IntegrationTests" />
+  </ItemGroup>
 </Project>

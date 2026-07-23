@@ -5,11 +5,25 @@ namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 /// <summary>
 /// Owns the mutable ship state confined to a single solar-system command loop.
 /// </summary>
-internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
+internal sealed class SolarSystemState
 {
     private readonly Dictionary<CharacterId, SolarShipState> shipsByCharacter = [];
     private readonly Dictionary<long, CharacterId> charactersByShip = [];
     private ulong tick;
+    private ulong sequence;
+
+    public SolarSystemState(
+        SolarSystemRuntimeContext context,
+        SolarSystemSnapshot? snapshot = null)
+    {
+        this.context = context;
+        if (snapshot is not null)
+        {
+            Restore(snapshot);
+        }
+    }
+
+    private readonly SolarSystemRuntimeContext context;
 
     public SolarShipState Undock(
         SolarCharacter character,
@@ -43,6 +57,7 @@ internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
             SolarVector3.Zero);
         shipsByCharacter.Add(character.CharacterId, state);
         charactersByShip.Add(character.ShipId, character.CharacterId);
+        sequence = checked(sequence + 1);
         return state;
     }
 
@@ -60,6 +75,7 @@ internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
         SolarShipState current = RequiredShip(character);
         shipsByCharacter.Remove(character.CharacterId);
         charactersByShip.Remove(current.ShipId);
+        sequence = checked(sequence + 1);
         return new SolarCharacterLocation(
             character.CharacterId,
             character.ShipId,
@@ -77,6 +93,7 @@ internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
         SolarShipState current = RequiredShip(character);
         SolarShipState updated = current with { Velocity = velocity };
         shipsByCharacter[character.CharacterId] = updated;
+        sequence = checked(sequence + 1);
         return updated;
     }
 
@@ -107,6 +124,7 @@ internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
     public void AdvanceTick()
     {
         tick = checked(tick + 1);
+        sequence = checked(sequence + 1);
         foreach (SolarShipState current in shipsByCharacter.Values.OrderBy(state => state.ShipId).ToArray())
         {
             var updated = current with
@@ -116,6 +134,25 @@ internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
             };
             shipsByCharacter[current.CharacterId] = updated;
         }
+    }
+
+    public SolarSystemSnapshot CaptureSnapshot(SimulationEpoch expectedEpoch)
+    {
+        ValidateEpoch(expectedEpoch);
+        return new SolarSystemSnapshot(
+            SolarSystemSnapshot.CurrentFormatVersion,
+            context.SolarSystemId,
+            context.Epoch,
+            tick,
+            sequence,
+            shipsByCharacter.Values
+                .OrderBy(state => state.ShipId)
+                .Select(state => new SolarShipSnapshot(
+                    state.CharacterId,
+                    state.ShipId,
+                    state.Position,
+                    state.Velocity))
+                .ToArray());
     }
 
     private SolarShipState RequiredShip(SolarCharacter character)
@@ -153,6 +190,41 @@ internal sealed class SolarSystemState(SolarSystemRuntimeContext context)
         if (expectedEpoch != context.Epoch)
         {
             throw new InvalidOperationException("The solar-system ownership epoch is stale.");
+        }
+    }
+
+    private void Restore(SolarSystemSnapshot snapshot)
+    {
+        if (snapshot.FormatVersion != SolarSystemSnapshot.CurrentFormatVersion)
+        {
+            throw new InvalidDataException(
+                $"Solar-system snapshot format {snapshot.FormatVersion} is unsupported.");
+        }
+
+        if (snapshot.SolarSystemId != context.SolarSystemId)
+        {
+            throw new InvalidDataException("The solar-system snapshot belongs to another partition.");
+        }
+
+        tick = snapshot.Tick;
+        sequence = snapshot.LastSequence;
+        foreach (SolarShipSnapshot ship in snapshot.Ships.OrderBy(ship => ship.ShipId))
+        {
+            if (ship.ShipId <= 0
+                || !shipsByCharacter.TryAdd(
+                    ship.CharacterId,
+                    new SolarShipState(
+                        ship.CharacterId,
+                        ship.ShipId,
+                        context.SolarSystemId,
+                        context.Epoch,
+                        tick,
+                        ship.Position,
+                        ship.Velocity))
+                || !charactersByShip.TryAdd(ship.ShipId, ship.CharacterId))
+            {
+                throw new InvalidDataException("The solar-system snapshot contains duplicate or invalid ship identities.");
+            }
         }
     }
 }

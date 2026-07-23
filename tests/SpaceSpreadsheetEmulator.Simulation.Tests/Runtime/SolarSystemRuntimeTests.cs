@@ -164,6 +164,104 @@ public sealed class SolarSystemRuntimeTests
         await run;
     }
 
+    [Fact]
+    public async Task SnapshotRestoreContinuesDeterministicMovement()
+    {
+        var firstTicks = new ManualSimulationTickSource();
+        var first = CreateRuntime(SystemId, Epoch, firstTicks);
+        using var firstStopping = new CancellationTokenSource();
+        Task firstRun = first.RunAsync(firstStopping.Token);
+        await first.UndockAsync(Character, new SolarVector3(10, 20, 30), Epoch);
+        await first.SetVelocityAsync(Character, new SolarVector3(2, -3, 4), Epoch);
+        firstTicks.Advance();
+        SolarShipState before = await WaitForTickAsync(first, Character, Epoch, 1);
+        SolarSystemSnapshot snapshot = await first.CaptureSnapshotAsync(Epoch);
+        firstStopping.Cancel();
+        await firstRun;
+
+        var secondTicks = new ManualSimulationTickSource();
+        var restored = new SolarSystemRuntime(
+            new SolarSystemRuntimeContext(SystemId, new NodeId("worker-restored"), new SimulationEpoch(8)),
+            commandQueueCapacity: 8,
+            secondTicks,
+            snapshot);
+        using var secondStopping = new CancellationTokenSource();
+        Task secondRun = restored.RunAsync(secondStopping.Token);
+        SolarShipState? restoredState = await restored.GetShipStateAsync(
+            Character.CharacterId,
+            Character.ShipId,
+            new SimulationEpoch(8));
+        Assert.NotNull(restoredState);
+        Assert.Equal(before.Position, restoredState.Position);
+        Assert.Equal(before.Velocity, restoredState.Velocity);
+        Assert.Equal(before.Tick, restoredState.Tick);
+
+        secondTicks.Advance();
+        SolarShipState after = await WaitForTickAsync(
+            restored,
+            Character,
+            new SimulationEpoch(8),
+            2);
+        Assert.Equal(before.Position.Advance(before.Velocity), after.Position);
+
+        secondStopping.Cancel();
+        await secondRun;
+    }
+
+    [Fact]
+    public void RestoreRejectsWrongFormatSystemAndDuplicateIdentities()
+    {
+        SolarShipSnapshot ship = new(
+            Character.CharacterId,
+            Character.ShipId,
+            SolarVector3.Zero,
+            SolarVector3.Zero);
+        SolarSystemRuntimeContext context =
+            new(SystemId, new NodeId("worker-test"), Epoch);
+
+        Assert.Throws<InvalidDataException>(() => new SolarSystemRuntime(
+            context,
+            8,
+            new ManualSimulationTickSource(),
+            new SolarSystemSnapshot(2, SystemId, Epoch, 0, 0, [])));
+        Assert.Throws<InvalidDataException>(() => new SolarSystemRuntime(
+            context,
+            8,
+            new ManualSimulationTickSource(),
+            new SolarSystemSnapshot(
+                SolarSystemSnapshot.CurrentFormatVersion,
+                new SolarSystemId(SystemId.Value + 1),
+                Epoch,
+                0,
+                0,
+                [])));
+        Assert.Throws<InvalidDataException>(() => new SolarSystemRuntime(
+            context,
+            8,
+            new ManualSimulationTickSource(),
+            new SolarSystemSnapshot(
+                SolarSystemSnapshot.CurrentFormatVersion,
+                SystemId,
+                Epoch,
+                0,
+                0,
+                [ship, ship])));
+    }
+
+    [Fact]
+    public void RegistryRequiresOneInitialization()
+    {
+        var registry = new SolarSystemRuntimeRegistry();
+        Assert.Empty(registry.Runtimes);
+        Assert.Throws<ArgumentException>(() => registry.Initialize([]));
+
+        registry = new SolarSystemRuntimeRegistry();
+        registry.Initialize([CreateRuntime(SystemId, Epoch, new ManualSimulationTickSource())]);
+        Assert.Throws<InvalidOperationException>(() => registry.Initialize(
+            [CreateRuntime(new SolarSystemId(SystemId.Value + 1), Epoch, new ManualSimulationTickSource())]));
+        Assert.False(registry.TryGet(new SolarSystemId(SystemId.Value + 1), out _));
+    }
+
     private static SolarSystemRuntime CreateRuntime(
         SolarSystemId systemId,
         SimulationEpoch epoch,

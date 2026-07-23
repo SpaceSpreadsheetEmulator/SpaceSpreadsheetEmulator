@@ -22,5 +22,26 @@ jobs:
           --startup-project src/SpaceSpreadsheetEmulator.Persistence
           --configuration Release
           --no-build
-      - run: dotnet test SpaceSpreadsheetEmulator.slnx --configuration Release --no-build
+      - run: >-
+          dotnet test SpaceSpreadsheetEmulator.slnx
+          --configuration Release
+          --no-build
+          --collect:"XPlat Code Coverage"
+          --settings coverage.runsettings
+          --results-directory artifacts/test-results
+          --logger trx
+      - run: >-
+          dotnet reportgenerator
+          -reports:"artifacts/test-results/**/coverage.cobertura.xml"
+          -targetdir:"artifacts/coverage"
+          -reporttypes:"Cobertura;HtmlSummary;TextSummary"
+          -filefilters:"+*/src/*;-*/Migrations/*;-*/*.Designer.cs;-*/obj/*"
+      - run: eng/verify-coverage.sh artifacts/coverage/Cobertura.xml 0.80 0.70
       - run: dotnet run --project tools/SpaceSpreadsheetEmulator.Protocol.Tool --configuration Release --no-build -- fixtures verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-and-coverage
+          path: |
+            artifacts/test-results
+            artifacts/coverage

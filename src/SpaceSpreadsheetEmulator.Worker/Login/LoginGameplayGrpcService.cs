@@ -119,7 +119,8 @@ public sealed partial class LoginGameplayGrpcService(
     private static ServiceError Error(string code, string message) => new() { Code = code, Message = message };
 
     private static Backplane.Contracts.V1.CharacterSummary MapCharacter(Gameplay.Characters.CharacterSummary character)
-        => new()
+    {
+        var response = new Backplane.Contracts.V1.CharacterSummary
         {
             CharacterId = character.CharacterId.Value,
             Name = character.Name,
@@ -129,8 +130,7 @@ public sealed partial class LoginGameplayGrpcService(
             CharacterTypeId = character.CharacterTypeId,
             CorporationId = character.CorporationId,
             CorporationName = character.CorporationName,
-            StationId = character.StationId,
-            StationName = character.StationName,
+            StationName = character.StationName ?? string.Empty,
             SolarSystemId = character.SolarSystemId,
             SolarSystemName = character.SolarSystemName,
             ConstellationId = character.ConstellationId,
@@ -142,6 +142,13 @@ public sealed partial class LoginGameplayGrpcService(
             SkillPoints = character.SkillPoints,
             LastLoginUnixMilliseconds = character.LastLoginAt.ToUnixTimeMilliseconds(),
         };
+        if (character.StationId is int stationId)
+        {
+            response.StationId = stationId;
+        }
+
+        return response;
+    }
 
     [LoggerMessage(EventId = 300, Level = LogLevel.Warning, Message = "Login authentication rejected: {Reason}")]
     private static partial void LogAuthenticationRejected(ILogger logger, string reason);

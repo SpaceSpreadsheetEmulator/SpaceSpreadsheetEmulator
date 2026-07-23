@@ -29,6 +29,8 @@ builder.Services.AddOptions<WorkerSolarSystemOptions>()
         "Worker solar-system ownership requires a node identifier.")
     .Validate(options => options.CommandQueueCapacity > 0,
         "Worker solar-system command queue capacity must be positive.")
+    .Validate(options => options.CheckpointIntervalSeconds > 0,
+        "Worker solar-system checkpoint interval must be positive.")
     .Validate(options => options.HasValidAssignments(),
         "Worker solar-system assignments require unique positive system IDs and epochs plus unique finite station entry points.")
     .ValidateOnStart();
@@ -81,20 +83,13 @@ if (loginOptions.Enabled)
 
 if (solarOptions.Enabled)
 {
-    var ownerNodeId = new NodeId(solarOptions.NodeId);
-    ISolarSystemRuntime[] configuredRuntimes = solarOptions.Assignments
-        .Select(assignment => (ISolarSystemRuntime)new SolarSystemRuntime(
-            new SolarSystemRuntimeContext(
-                new SolarSystemId(assignment.SolarSystemId),
-                ownerNodeId,
-                new SimulationEpoch(assignment.Epoch)),
-            solarOptions.CommandQueueCapacity,
-            new PeriodicSimulationTickSource(TimeProvider.System, TimeSpan.FromSeconds(1))))
-        .ToArray();
+    builder.Services.AddSingleton(new SolarSystemRuntimeRegistry());
     builder.Services.AddSingleton<ISolarSystemRuntimeRegistry>(
-        new SolarSystemRuntimeRegistry(configuredRuntimes));
+        services => services.GetRequiredService<SolarSystemRuntimeRegistry>());
     builder.Services.AddSingleton<ISolarSystemEntryPointResolver>(
         new ConfiguredSolarSystemEntryPointResolver(solarOptions.Assignments));
+    builder.Services.AddSingleton<SolarSystemRuntimeInitializer>();
+    builder.Services.AddSingleton<SolarSystemWorkflowCoordinator>();
     builder.Services.AddSingleton<SolarSystemRequestResolver>();
     builder.Services.AddHostedService<SolarSystemRuntimeHostedService>();
     builder.Services.AddHealthChecks()
@@ -112,6 +107,12 @@ if (loginOptions.Enabled)
     {
         throw new InvalidOperationException(readiness.Detail);
     }
+}
+
+if (solarOptions.Enabled)
+{
+    await app.Services.GetRequiredService<SolarSystemRuntimeInitializer>()
+        .InitializeAsync();
 }
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });

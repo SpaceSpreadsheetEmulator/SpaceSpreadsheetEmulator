@@ -8,8 +8,12 @@ using SpaceSpreadsheetEmulator.Worker.IntegrationTests.Support;
 namespace SpaceSpreadsheetEmulator.Worker.IntegrationTests.Login;
 
 [Collection(WorkerPostgreSqlCollection.Name)]
-public class LoginGameplayTests(WorkerPostgreSqlFixture database)
+public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifetime
 {
+    public Task InitializeAsync() => database.ResetAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
     [Fact]
     public async Task EnrolledAccountReceivesValidatedStarterCharacter()
     {
@@ -72,6 +76,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database)
             CharacterId = character.CharacterId,
             ShipId = character.ShipId,
             StationId = character.StationId,
+            IdempotencyKey = "worker-test-undock-1",
         };
         SolarSystemMutationResponse undocked = await solar.UndockAsync(mutation);
 
@@ -114,6 +119,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database)
         Assert.Equal(velocitySet.ShipState.Position.Y - (2 * elapsedTicks), moved.Position.Y);
         Assert.Equal(velocitySet.ShipState.Position.Z + (0.5 * elapsedTicks), moved.Position.Z);
 
+        mutation.IdempotencyKey = "worker-test-dock-1";
         SolarSystemMutationResponse docked = await solar.DockAsync(mutation);
         Assert.Empty(docked.Error?.Code ?? string.Empty);
         Assert.True(docked.HasStationId);
@@ -132,6 +138,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database)
         Assert.Equal("simulation.entity_not_found", absent.Error.Code);
 
         mutation.ExpectedEpoch = 6;
+        mutation.IdempotencyKey = "worker-test-stale-1";
         SolarSystemMutationResponse stale = await solar.UndockAsync(mutation);
         Assert.Equal("simulation.stale_route", stale.Error.Code);
     }

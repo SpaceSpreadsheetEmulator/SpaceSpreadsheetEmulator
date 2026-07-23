@@ -11,8 +11,12 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Connections;
 
 [Collection(TopologyPostgreSqlCollection.Name)]
-public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database)
+public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) : IAsyncLifetime
 {
+    public Task InitializeAsync() => database.ResetAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
     [Fact]
     public async Task CharacterEntersMovesAndLeavesThroughRealProcesses()
     {
@@ -211,6 +215,87 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database)
             """,
             connection);
         Assert.Equal(2L, await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task InSpaceCharacterRestoresAndCanDockAfterTopologyRestart()
+    {
+        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync();
+        long characterId;
+        long shipId;
+        long stationId;
+        long solarSystemId;
+        await using (StandaloneTopology first = await StandaloneTopology.StartAsync(
+                         artifact.ArtifactDirectory,
+                         database.ConnectionString))
+        {
+            using var client = new ProtocolLoopbackClient(
+                await LoopbackClient.ConnectAsync(first.GatewayEndpoint));
+            await client.CompleteHandshakeAsync(
+                "in-space-restart-pilot",
+                ImmutableArray.Create<byte>(0xD4));
+            PyList selection = Assert.IsType<PyList>(await client.CallAsync(
+                "charUnboundMgr",
+                "GetCharacterSelectionData",
+                new PyTuple()));
+            IReadOnlyDictionary<string, PyValue> selected = ReadSelectedCharacter(selection);
+            characterId = Integer(selected, "characterID");
+            stationId = Integer(selected, "stationID");
+            solarSystemId = Integer(selected, "solarSystemID");
+            await client.CallAsync(
+                "charUnboundMgr",
+                "SelectCharacterID",
+                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
+            shipId = CurrentSessionValue(await client.ReadPacketAsync(), "shipid");
+
+            var nestedUndock = new PyTuple(
+                new PyBuffer("Undock"u8),
+                new PyTuple(new PyInteger(shipId), new PyBoolean(false)),
+                new PyDictionary(new PyDictionaryEntry(
+                    new PyText("onlineModules"),
+                    new PyDictionary())));
+            _ = Assert.IsType<PyText>(await client.CallAsync(
+                "ship",
+                "MachoBindObject",
+                new PyTuple(
+                    new PyTuple(new PyInteger(stationId), new PyInteger(15)),
+                    nestedUndock)));
+            AssertStation(await client.ReadPacketAsync(), expectedStationId: null);
+        }
+
+        await using (StandaloneTopology second = await StandaloneTopology.StartAsync(
+                         artifact.ArtifactDirectory,
+                         database.ConnectionString))
+        {
+            using var client = new ProtocolLoopbackClient(
+                await LoopbackClient.ConnectAsync(second.GatewayEndpoint));
+            await client.CompleteHandshakeAsync(
+                "in-space-restart-pilot",
+                ImmutableArray.Create<byte>(0xD4));
+            PyList selection = Assert.IsType<PyList>(await client.CallAsync(
+                "charUnboundMgr",
+                "GetCharacterSelectionData",
+                new PyTuple()));
+            IReadOnlyDictionary<string, PyValue> selected = ReadSelectedCharacter(selection);
+            Assert.Equal(characterId, Integer(selected, "characterID"));
+            Assert.IsType<PyNull>(selected["stationID"]);
+            await client.CallAsync(
+                "charUnboundMgr",
+                "SelectCharacterID",
+                new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
+            AssertStation(await client.ReadPacketAsync(), expectedStationId: null);
+
+            PyText solarBinding = Assert.IsType<PyText>(await client.CallAsync(
+                "beyonce",
+                "MachoBindObject",
+                new PyTuple(new PyInteger(solarSystemId))));
+            Assert.IsType<PyNull>(await client.CallAsync(
+                service: null,
+                "CmdDock",
+                new PyTuple(new PyInteger(stationId), new PyInteger(shipId)),
+                solarBinding.Value));
+            AssertStation(await client.ReadPacketAsync(), stationId);
+        }
     }
 
     private static RequestContext InspectorContext()

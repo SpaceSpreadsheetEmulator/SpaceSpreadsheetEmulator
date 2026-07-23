@@ -15,6 +15,8 @@ public sealed class UnavailableSolarSystemBackend : ISolarSystemBackend
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken)
         => Task.FromResult<SolarSystemTransition?>(null);
 
@@ -23,6 +25,8 @@ public sealed class UnavailableSolarSystemBackend : ISolarSystemBackend
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken)
         => Task.FromResult<SolarSystemTransition?>(null);
 }

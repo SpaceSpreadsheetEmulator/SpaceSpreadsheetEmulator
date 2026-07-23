@@ -33,6 +33,24 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
 
     public async Task DisposeAsync() => await container.DisposeAsync();
 
+    public async Task ResetAsync()
+    {
+        await using ServiceProvider services = CreateServices();
+        IDbContextFactory<GameDbContext> factory =
+            services.GetRequiredService<IDbContextFactory<GameDbContext>>();
+        await using GameDbContext context = await factory.CreateDbContextAsync();
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            TRUNCATE TABLE
+                operations.character_location_transitions,
+                simulation.solar_system_snapshots,
+                characters.characters,
+                inventory.items,
+                identity.accounts
+            CASCADE
+            """);
+    }
+
     public ServiceProvider CreateServices()
     {
         var services = new ServiceCollection();

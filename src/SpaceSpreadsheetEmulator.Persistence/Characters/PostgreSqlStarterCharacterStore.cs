@@ -77,8 +77,8 @@ internal sealed class PostgreSqlStarterCharacterStore(
                 {
                     TypeId = definition.ShipTypeId,
                     OwnerId = character.CharacterId,
-                    LocationId = character.CharacterId,
-                    LocationKind = (short)InventoryLocationKind.Character,
+                    LocationId = definition.StationId,
+                    LocationKind = (short)InventoryLocationKind.Station,
                     Flag = (short)InventoryItemFlag.ActiveShip,
                     Quantity = 1,
                     Singleton = true,

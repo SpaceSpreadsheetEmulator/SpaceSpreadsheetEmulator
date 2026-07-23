@@ -16,7 +16,8 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
     public SolarSystemRuntime(
         SolarSystemRuntimeContext context,
         int commandQueueCapacity,
-        ISimulationTickSource tickSource)
+        ISimulationTickSource tickSource,
+        SolarSystemSnapshot? snapshot = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(commandQueueCapacity);
@@ -24,7 +25,7 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
 
         Context = context;
         this.tickSource = tickSource;
-        state = new SolarSystemState(context);
+        state = new SolarSystemState(context, snapshot);
         commands = Channel.CreateBounded<RuntimeCommand>(new BoundedChannelOptions(commandQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -64,6 +65,11 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken = default)
         => SubmitAsync(new GetShipStateCommand(characterId, shipId, expectedEpoch, cancellationToken), cancellationToken);
+
+    public Task<SolarSystemSnapshot> CaptureSnapshotAsync(
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken = default)
+        => SubmitAsync(new CaptureSnapshotCommand(expectedEpoch, cancellationToken), cancellationToken);
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -225,6 +231,15 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
     {
         protected override SolarShipState? Apply(SolarSystemState state)
             => state.GetShipState(characterId, shipId, expectedEpoch);
+    }
+
+    private sealed class CaptureSnapshotCommand(
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken)
+        : ResultCommand<SolarSystemSnapshot>(cancellationToken)
+    {
+        protected override SolarSystemSnapshot Apply(SolarSystemState state)
+            => state.CaptureSnapshot(expectedEpoch);
     }
 
     private sealed class TickCommand(CancellationToken cancellationToken) : RuntimeCommand(cancellationToken)

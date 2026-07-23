@@ -1,4 +1,5 @@
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
+using Microsoft.Extensions.Options;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
@@ -7,10 +8,28 @@ namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 /// </summary>
 internal sealed partial class SolarSystemRuntimeHostedService(
     ISolarSystemRuntimeRegistry registry,
+    SolarSystemWorkflowCoordinator workflows,
+    TimeProvider timeProvider,
+    IOptions<WorkerSolarSystemOptions> options,
     ILogger<SolarSystemRuntimeHostedService> logger) : BackgroundService
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
-        => Task.WhenAll(registry.Runtimes.Select(runtime => RunAsync(runtime, stoppingToken)));
+        => Task.WhenAll(
+            registry.Runtimes.Select(runtime => RunAsync(runtime, stoppingToken))
+                .Append(CheckpointPeriodicallyAsync(stoppingToken)));
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        foreach (ISolarSystemRuntime runtime in registry.Runtimes)
+        {
+            if (runtime.Status == SolarSystemRuntimeStatus.Running)
+            {
+                await workflows.CheckpointAsync(runtime, cancellationToken);
+            }
+        }
+
+        await base.StopAsync(cancellationToken);
+    }
 
     private async Task RunAsync(ISolarSystemRuntime runtime, CancellationToken stoppingToken)
     {
@@ -31,6 +50,22 @@ internal sealed partial class SolarSystemRuntimeHostedService(
                 runtime.Context.OwnerNodeId.Value,
                 runtime.Context.Epoch.Value,
                 runtime.Status);
+        }
+    }
+
+    private async Task CheckpointPeriodicallyAsync(CancellationToken stoppingToken)
+    {
+        TimeSpan interval = TimeSpan.FromSeconds(options.Value.CheckpointIntervalSeconds);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await Task.Delay(interval, timeProvider, stoppingToken);
+            foreach (ISolarSystemRuntime runtime in registry.Runtimes)
+            {
+                if (runtime.Status == SolarSystemRuntimeStatus.Running)
+                {
+                    await workflows.CheckpointAsync(runtime, stoppingToken);
+                }
+            }
         }
     }
 

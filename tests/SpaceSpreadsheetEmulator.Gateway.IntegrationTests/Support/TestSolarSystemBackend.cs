@@ -23,6 +23,8 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken)
     {
         UndockCount++;
@@ -39,6 +41,8 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
+        int stationId,
+        long clientCallId,
         CancellationToken cancellationToken)
     {
         DockCount++;
@@ -46,7 +50,7 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
             character.SolarSystemId,
             character.CharacterId,
             character.ShipId,
-            character.StationId,
+            stationId,
             route.Epoch));
     }
 }

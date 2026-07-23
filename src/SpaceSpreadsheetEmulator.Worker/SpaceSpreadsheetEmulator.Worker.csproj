@@ -14,4 +14,7 @@
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Simulation/SpaceSpreadsheetEmulator.Simulation.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.StaticData/SpaceSpreadsheetEmulator.StaticData.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SpaceSpreadsheetEmulator.Worker.IntegrationTests" />
+  </ItemGroup>
 </Project>

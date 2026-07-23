@@ -18,7 +18,7 @@ public class DependencyRules
             ["Simulation"] = ["Primitives"],
             ["Cluster.Contracts"] = ["Primitives"],
             ["Cluster"] = ["Cluster.Contracts", "Primitives"],
-            ["Persistence"] = ["Gameplay", "Identity", "Inventory", "Primitives"],
+            ["Persistence"] = ["Gameplay", "Identity", "Inventory", "Primitives", "Simulation"],
             ["Gateway"] = ["Backplane.Contracts", "Cluster.Contracts", "Primitives", "Protocol"],
             ["Coordinator"] = ["Cluster.Contracts", "Cluster"],
             ["Worker"] = ["Backplane.Contracts", "Content", "Gameplay", "Identity", "Persistence", "Primitives", "Simulation", "StaticData"],

@@ -11,11 +11,14 @@ internal sealed class WorkerSolarSystemOptions
 
     public int CommandQueueCapacity { get; init; } = 256;
 
+    public int CheckpointIntervalSeconds { get; init; } = 10;
+
     public List<WorkerSolarSystemAssignmentOptions> Assignments { get; init; } = [];
 
     public bool HasValidAssignments()
         => !Enabled
-            || (Assignments.Count > 0
+            || (CheckpointIntervalSeconds > 0
+                && Assignments.Count > 0
                 && Assignments.All(assignment =>
                     assignment.SolarSystemId > 0
                     && assignment.Epoch > 0

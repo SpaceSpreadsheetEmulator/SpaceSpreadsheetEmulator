@@ -14,7 +14,7 @@ namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 /// </summary>
 internal sealed class SolarSystemGameplayGrpcService(
     SolarSystemRequestResolver requestResolver,
-    ISolarSystemEntryPointResolver entryPoints) : SolarSystemGameplay.SolarSystemGameplayBase
+    SolarSystemWorkflowCoordinator workflows) : SolarSystemGameplay.SolarSystemGameplayBase
 {
     public override async Task<SolarSystemMutationResponse> Undock(
         SolarSystemMutationRequest request,
@@ -34,31 +34,22 @@ internal sealed class SolarSystemGameplayGrpcService(
             return MutationFailure(resolution.Error);
         }
 
-        if (resolution.Character!.StationId != request.StationId)
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey)
+            || request.IdempotencyKey.Length > 100)
         {
             return MutationFailure(Error(
-                "gameplay.character_mismatch",
-                "The character does not belong to the requested station."));
-        }
-
-        if (!entryPoints.TryResolve(
-                resolution.Runtime!.Context.SolarSystemId,
-                request.StationId,
-                out RuntimeVector3 entryPoint))
-        {
-            return MutationFailure(Error(
-                "simulation.entry_point_missing",
-                "The requested station has no configured solar-system entry point."));
+                "gameplay.invalid_idempotency_key",
+                "A bounded idempotency key is required."));
         }
 
         try
         {
-            RuntimeShipState state = await resolution.Runtime.UndockAsync(
-                resolution.SolarCharacter!,
-                entryPoint,
-                resolution.Runtime.Context.Epoch,
+            RuntimeShipState state = await workflows.UndockAsync(
+                resolution,
+                request.IdempotencyKey,
+                request.StationId,
                 context.CancellationToken);
-            return MutationSuccess(state, resolution.Runtime.Context.OwnerNodeId, stationId: null);
+            return MutationSuccess(state, resolution.Runtime!.Context.OwnerNodeId, stationId: null);
         }
         catch (InvalidOperationException error)
         {
@@ -84,23 +75,24 @@ internal sealed class SolarSystemGameplayGrpcService(
             return MutationFailure(resolution.Error);
         }
 
-        if (resolution.Character!.StationId != request.StationId)
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey)
+            || request.IdempotencyKey.Length > 100)
         {
             return MutationFailure(Error(
-                "gameplay.character_mismatch",
-                "The character does not belong to the requested station."));
+                "gameplay.invalid_idempotency_key",
+                "A bounded idempotency key is required."));
         }
 
         try
         {
-            SolarCharacterLocation location = await resolution.Runtime!.DockAsync(
-                resolution.SolarCharacter!,
+            SolarCharacterLocation location = await workflows.DockAsync(
+                resolution,
+                request.IdempotencyKey,
                 request.StationId,
-                resolution.Runtime.Context.Epoch,
                 context.CancellationToken);
             return new SolarSystemMutationResponse
             {
-                OwnerNodeId = resolution.Runtime.Context.OwnerNodeId.Value,
+                OwnerNodeId = resolution.Runtime!.Context.OwnerNodeId.Value,
                 Epoch = location.Epoch.Value,
                 SolarSystemId = location.SolarSystemId.Value,
                 CharacterId = location.CharacterId.Value,
@@ -151,10 +143,9 @@ internal sealed class SolarSystemGameplayGrpcService(
 
         try
         {
-            RuntimeShipState state = await resolution.Runtime!.SetVelocityAsync(
-                resolution.SolarCharacter!,
+            RuntimeShipState state = await workflows.SetVelocityAsync(
+                resolution,
                 velocity,
-                resolution.Runtime.Context.Epoch,
                 context.CancellationToken);
             return StateSuccess(state);
         }
