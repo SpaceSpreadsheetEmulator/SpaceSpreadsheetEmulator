@@ -47,6 +47,9 @@ internal sealed partial class GatewayClientConnection(
     private CharacterSummary? selectedCharacter;
     private CharacterSelectionResponse? characterSelection;
     private string? solarSystemBinding;
+    private CancellationTokenSource? connectionLifetime;
+    private CancellationTokenSource? solarSubscriptionCancellation;
+    private Task? solarSubscriptionTask;
 
     public void Dispose()
     {
@@ -61,7 +64,10 @@ internal sealed partial class GatewayClientConnection(
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        if (!await loginBackend.IsCompatibleAsync(cancellationToken))
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        connectionLifetime = lifetime;
+        CancellationToken connectionToken = lifetime.Token;
+        if (!await loginBackend.IsCompatibleAsync(connectionToken))
         {
             LogBackendUnavailable(logger);
             return;
@@ -78,14 +84,18 @@ internal sealed partial class GatewayClientConnection(
             SingleWriter = true,
         });
 
-        Task writerTask = WriteFramesAsync(output, outbound.Reader, cancellationToken);
+        Task writerTask = WriteFramesAsync(output, outbound.Reader, connectionToken);
         try
         {
-            await QueueValueAsync(HandshakeValueCodec.EncodeServerVersion(profile), outbound.Writer, encrypt: false, cancellationToken);
-            await ReadFramesAsync(input, outbound.Writer, cancellationToken);
+            await QueueValueAsync(HandshakeValueCodec.EncodeServerVersion(profile), outbound.Writer, encrypt: false, connectionToken);
+            await ReadFramesAsync(input, outbound.Writer, connectionToken);
+        }
+        catch (OperationCanceledException) when (connectionToken.IsCancellationRequested)
+        {
         }
         finally
         {
+            await StopSolarSystemSubscriptionAsync(cancel: true);
             outbound.Writer.TryComplete();
             await input.CompleteAsync();
             try
@@ -109,6 +119,7 @@ internal sealed partial class GatewayClientConnection(
                 }
 
                 Dispose();
+                connectionLifetime = null;
             }
         }
     }

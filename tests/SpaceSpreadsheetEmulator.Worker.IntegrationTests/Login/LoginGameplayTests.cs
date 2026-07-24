@@ -1,7 +1,10 @@
 using Google.Protobuf;
+using Grpc.Core;
 using Grpc.Net.Client;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
+using SpaceSpreadsheetEmulator.Backplane.Contracts.V2;
 using SpaceSpreadsheetEmulator.Worker.IntegrationTests.Support;
+using LoginRequestContext = SpaceSpreadsheetEmulator.Backplane.Contracts.V1.RequestContext;
 
 namespace SpaceSpreadsheetEmulator.Worker.IntegrationTests.Login;
 
@@ -26,7 +29,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
         });
         var client = new LoginGameplay.LoginGameplayClient(channel);
         var solar = new SolarSystemGameplay.SolarSystemGameplayClient(channel);
-        RequestContext context = Context();
+        LoginRequestContext context = LoginContext();
 
         CompatibilityResponse compatibility = await client.GetCompatibilityAsync(new CompatibilityRequest());
         AuthenticateResponse login = await client.AuthenticateAsync(new AuthenticateRequest
@@ -89,9 +92,10 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
         Assert.False(agent.IsLocatorAgent);
 
         CharacterSummary character = selection.Characters[0];
-        var mutation = new SolarSystemMutationRequest
+        GameplayRequestContext gameplayContext = GameplayContext();
+        var mutation = new SolarSystemTransitionIntent
         {
-            Context = context,
+            Context = gameplayContext,
             LoginTicket = login.LoginTicket,
             OwnerNodeId = "worker-test",
             ExpectedEpoch = 7,
@@ -101,7 +105,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
             StationId = character.StationId,
             IdempotencyKey = "worker-test-undock-1",
         };
-        SolarSystemMutationResponse undocked = await solar.UndockAsync(mutation);
+        SolarSystemCommandResult undocked = await solar.RequestUndockAsync(mutation);
 
         Assert.Empty(undocked.Error?.Code ?? string.Empty);
         Assert.False(undocked.HasStationId);
@@ -111,87 +115,105 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
         Assert.Equal(-50, undocked.ShipState.Position.Y);
         Assert.Equal(25, undocked.ShipState.Position.Z);
 
-        SolarShipStateResponse velocitySet = await solar.SetVelocityAsync(new SolarSystemVelocityRequest
-        {
-            Context = context,
-            LoginTicket = login.LoginTicket,
-            OwnerNodeId = mutation.OwnerNodeId,
-            ExpectedEpoch = mutation.ExpectedEpoch,
-            SolarSystemId = mutation.SolarSystemId,
-            CharacterId = mutation.CharacterId,
-            ShipId = mutation.ShipId,
-            Velocity = new SolarVector3 { X = 10, Y = -2, Z = 0.5 },
-        });
-        Assert.Empty(velocitySet.Error?.Code ?? string.Empty);
-
-        SolarShipState moved = await WaitForMovementAsync(
-            solar,
-            new SolarShipStateRequest
+        using AsyncServerStreamingCall<SessionEventEnvelope> subscription =
+            solar.SubscribeSession(new SessionSubscriptionRequest
             {
-                Context = context,
+                Context = gameplayContext,
                 LoginTicket = login.LoginTicket,
                 OwnerNodeId = mutation.OwnerNodeId,
                 ExpectedEpoch = mutation.ExpectedEpoch,
                 SolarSystemId = mutation.SolarSystemId,
                 CharacterId = mutation.CharacterId,
                 ShipId = mutation.ShipId,
-            },
-            velocitySet.ShipState.Tick);
-        ulong elapsedTicks = moved.Tick - velocitySet.ShipState.Tick;
-        Assert.Equal(velocitySet.ShipState.Position.X + (10 * elapsedTicks), moved.Position.X);
-        Assert.Equal(velocitySet.ShipState.Position.Y - (2 * elapsedTicks), moved.Position.Y);
-        Assert.Equal(velocitySet.ShipState.Position.Z + (0.5 * elapsedTicks), moved.Position.Z);
+            });
+        using var streamTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        Assert.True(await subscription.ResponseStream.MoveNext(streamTimeout.Token));
+        SessionEventEnvelope snapshot = subscription.ResponseStream.Current;
+        Assert.Equal(SessionEventEnvelope.PayloadOneofCase.Snapshot, snapshot.PayloadCase);
+        Assert.Single(snapshot.Snapshot.Entities);
+
+        SolarSystemCommandResult movementAccepted =
+            await solar.SetMovementIntentAsync(new MovementIntentRequest
+            {
+                Context = gameplayContext,
+                LoginTicket = login.LoginTicket,
+                OwnerNodeId = mutation.OwnerNodeId,
+                ExpectedEpoch = mutation.ExpectedEpoch,
+                SolarSystemId = mutation.SolarSystemId,
+                CharacterId = mutation.CharacterId,
+                ShipId = mutation.ShipId,
+                Direction = new SolarVector3 { X = 1, Y = 0, Z = 0 },
+                RequestedSpeed = 10,
+            });
+        Assert.Empty(movementAccepted.Error?.Code ?? string.Empty);
+
+        SessionEventEnvelope movementChanged = await ReadEventAsync(
+            subscription.ResponseStream,
+            SessionEventEnvelope.PayloadOneofCase.ShipStateChanged,
+            streamTimeout.Token);
+        SessionEventEnvelope moved = await ReadEventAsync(
+            subscription.ResponseStream,
+            SessionEventEnvelope.PayloadOneofCase.EntityMoved,
+            streamTimeout.Token);
+        ulong elapsedTicks =
+            moved.EntityMoved.Tick - movementChanged.ShipStateChanged.Tick;
+        Assert.Equal(
+            movementChanged.ShipStateChanged.Position.X + (10 * elapsedTicks),
+            moved.EntityMoved.Position.X);
+        Assert.Equal(
+            movementChanged.ShipStateChanged.Position.Y,
+            moved.EntityMoved.Position.Y);
+        Assert.Equal(
+            movementChanged.ShipStateChanged.Position.Z,
+            moved.EntityMoved.Position.Z);
 
         mutation.IdempotencyKey = "worker-test-dock-1";
-        SolarSystemMutationResponse docked = await solar.DockAsync(mutation);
+        SolarSystemCommandResult docked = await solar.RequestDockAsync(mutation);
         Assert.Empty(docked.Error?.Code ?? string.Empty);
         Assert.True(docked.HasStationId);
         Assert.Equal(character.StationId, docked.StationId);
 
-        SolarShipStateResponse absent = await solar.GetShipStateAsync(new SolarShipStateRequest
-        {
-            Context = context,
-            LoginTicket = login.LoginTicket,
-            OwnerNodeId = mutation.OwnerNodeId,
-            ExpectedEpoch = mutation.ExpectedEpoch,
-            SolarSystemId = mutation.SolarSystemId,
-            CharacterId = mutation.CharacterId,
-            ShipId = mutation.ShipId,
-        });
-        Assert.Equal("simulation.entity_not_found", absent.Error.Code);
+        SessionEventEnvelope left = await ReadEventAsync(
+            subscription.ResponseStream,
+            SessionEventEnvelope.PayloadOneofCase.EntityLeft,
+            streamTimeout.Token);
+        Assert.Equal(character.CharacterId, left.EntityLeft.CharacterId);
+        Assert.False(await subscription.ResponseStream.MoveNext(streamTimeout.Token));
 
         mutation.ExpectedEpoch = 6;
         mutation.IdempotencyKey = "worker-test-stale-1";
-        SolarSystemMutationResponse stale = await solar.UndockAsync(mutation);
+        SolarSystemCommandResult stale = await solar.RequestUndockAsync(mutation);
         Assert.Equal("simulation.stale_route", stale.Error.Code);
     }
 
-    private static async Task<SolarShipState> WaitForMovementAsync(
-        SolarSystemGameplay.SolarSystemGameplayClient client,
-        SolarShipStateRequest request,
-        ulong initialTick)
+    private static async Task<SessionEventEnvelope> ReadEventAsync(
+        IAsyncStreamReader<SessionEventEnvelope> stream,
+        SessionEventEnvelope.PayloadOneofCase expected,
+        CancellationToken cancellationToken)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
         while (true)
         {
-            SolarShipStateResponse response = await client.GetShipStateAsync(
-                request,
-                cancellationToken: timeout.Token);
-            Assert.Empty(response.Error?.Code ?? string.Empty);
-            if (response.ShipState.Tick > initialTick)
+            Assert.True(await stream.MoveNext(cancellationToken));
+            if (stream.Current.PayloadCase == expected)
             {
-                return response.ShipState;
+                return stream.Current;
             }
-
-            await Task.Delay(25, timeout.Token);
         }
     }
 
-    private static RequestContext Context() => new()
+    private static LoginRequestContext LoginContext() => new()
     {
         GatewayId = "gateway-test",
         GatewaySessionId = 42,
         CorrelationId = "login-test-1",
+        ClientBuild = 3_396_210,
+    };
+
+    private static GameplayRequestContext GameplayContext() => new()
+    {
+        GatewayId = "gateway-test",
+        GatewaySessionId = 42,
+        CorrelationId = "gameplay-test-1",
         ClientBuild = 3_396_210,
     };
 }

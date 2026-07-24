@@ -34,6 +34,8 @@ builder.Services.AddOptions<WorkerSolarSystemOptions>()
         "Worker solar-system ownership requires a node identifier.")
     .Validate(options => options.CommandQueueCapacity > 0,
         "Worker solar-system command queue capacity must be positive.")
+    .Validate(options => options.SessionEventQueueCapacity > 0,
+        "Worker solar-system session-event queue capacity must be positive.")
     .Validate(options => options.CheckpointIntervalSeconds > 0,
         "Worker solar-system checkpoint interval must be positive.")
     .Validate(options => options.HasValidAssignments(),

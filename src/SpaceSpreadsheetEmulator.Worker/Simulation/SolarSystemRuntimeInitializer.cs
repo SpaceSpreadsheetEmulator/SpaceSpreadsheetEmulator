@@ -43,7 +43,8 @@ internal sealed class SolarSystemRuntimeInitializer(
                     epoch),
                 configured.CommandQueueCapacity,
                 new PeriodicSimulationTickSource(timeProvider, TimeSpan.FromSeconds(1)),
-                reconciled));
+                reconciled,
+                configured.SessionEventQueueCapacity));
         }
 
         registry.Initialize(runtimes);

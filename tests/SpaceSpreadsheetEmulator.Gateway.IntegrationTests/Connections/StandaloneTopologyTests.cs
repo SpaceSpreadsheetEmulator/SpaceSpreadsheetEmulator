@@ -1,12 +1,15 @@
 using System.Collections.Immutable;
 using Google.Protobuf;
+using Grpc.Core;
 using Grpc.Net.Client;
 using Npgsql;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
+using SpaceSpreadsheetEmulator.Backplane.Contracts.V2;
 using SpaceSpreadsheetEmulator.Cluster.Contracts.V1;
 using SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 using SpaceSpreadsheetEmulator.Protocol.MachoNet;
 using SpaceSpreadsheetEmulator.Protocol.Values;
+using LoginRequestContext = SpaceSpreadsheetEmulator.Backplane.Contracts.V1.RequestContext;
 
 namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Connections;
 
@@ -75,7 +78,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         using GrpcChannel workerChannel = GrpcChannel.ForAddress(topology.WorkerGrpcAddress);
         var login = new LoginGameplay.LoginGameplayClient(workerChannel);
         var solar = new SolarSystemGameplay.SolarSystemGameplayClient(workerChannel);
-        RequestContext inspectorContext = InspectorContext();
+        LoginRequestContext inspectorContext = InspectorContext();
         AuthenticateResponse inspector = await login.AuthenticateAsync(new AuthenticateRequest
         {
             Context = inspectorContext,
@@ -86,9 +89,10 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         });
         Assert.True(inspector.Success, inspector.Error?.Message);
 
-        var stateRequest = new SolarShipStateRequest
+        GameplayRequestContext gameplayContext = GameplayContext();
+        var subscriptionRequest = new SessionSubscriptionRequest
         {
-            Context = inspectorContext,
+            Context = gameplayContext,
             LoginTicket = inspector.LoginTicket,
             OwnerNodeId = "worker-topology",
             ExpectedEpoch = 7,
@@ -96,30 +100,50 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             CharacterId = characterId,
             ShipId = shipId,
         };
-        SolarShipStateResponse entered = await solar.GetShipStateAsync(stateRequest);
-        Assert.Empty(entered.Error?.Code ?? string.Empty);
-        Assert.Equal(100, entered.ShipState.Position.X);
-        Assert.Equal(-50, entered.ShipState.Position.Y);
-        Assert.Equal(25, entered.ShipState.Position.Z);
+        using AsyncServerStreamingCall<SessionEventEnvelope> subscription =
+            solar.SubscribeSession(subscriptionRequest);
+        using var streamTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Assert.True(await subscription.ResponseStream.MoveNext(streamTimeout.Token));
+        SessionEventEnvelope snapshot = subscription.ResponseStream.Current;
+        Assert.Equal(SessionEventEnvelope.PayloadOneofCase.Snapshot, snapshot.PayloadCase);
+        SolarShipState entered = Assert.Single(snapshot.Snapshot.Entities);
+        Assert.Equal(100, entered.Position.X);
+        Assert.Equal(-50, entered.Position.Y);
+        Assert.Equal(25, entered.Position.Z);
 
-        SolarShipStateResponse velocitySet = await solar.SetVelocityAsync(new SolarSystemVelocityRequest
-        {
-            Context = inspectorContext,
-            LoginTicket = inspector.LoginTicket,
-            OwnerNodeId = stateRequest.OwnerNodeId,
-            ExpectedEpoch = stateRequest.ExpectedEpoch,
-            SolarSystemId = stateRequest.SolarSystemId,
-            CharacterId = stateRequest.CharacterId,
-            ShipId = stateRequest.ShipId,
-            Velocity = new SolarVector3 { X = 10, Y = -2, Z = 0.5 },
-        });
-        Assert.Empty(velocitySet.Error?.Code ?? string.Empty);
-
-        SolarShipState moved = await WaitForMovementAsync(solar, stateRequest, velocitySet.ShipState.Tick);
-        ulong elapsedTicks = moved.Tick - velocitySet.ShipState.Tick;
-        Assert.Equal(velocitySet.ShipState.Position.X + (10 * elapsedTicks), moved.Position.X);
-        Assert.Equal(velocitySet.ShipState.Position.Y - (2 * elapsedTicks), moved.Position.Y);
-        Assert.Equal(velocitySet.ShipState.Position.Z + (0.5 * elapsedTicks), moved.Position.Z);
+        SolarSystemCommandResult movementAccepted =
+            await solar.SetMovementIntentAsync(new MovementIntentRequest
+            {
+                Context = gameplayContext,
+                LoginTicket = inspector.LoginTicket,
+                OwnerNodeId = subscriptionRequest.OwnerNodeId,
+                ExpectedEpoch = subscriptionRequest.ExpectedEpoch,
+                SolarSystemId = subscriptionRequest.SolarSystemId,
+                CharacterId = subscriptionRequest.CharacterId,
+                ShipId = subscriptionRequest.ShipId,
+                Direction = new SolarVector3 { X = 1, Y = 0, Z = 0 },
+                RequestedSpeed = 10,
+            });
+        Assert.Empty(movementAccepted.Error?.Code ?? string.Empty);
+        SessionEventEnvelope movementChanged = await ReadEventAsync(
+            subscription.ResponseStream,
+            SessionEventEnvelope.PayloadOneofCase.ShipStateChanged,
+            streamTimeout.Token);
+        SessionEventEnvelope moved = await ReadEventAsync(
+            subscription.ResponseStream,
+            SessionEventEnvelope.PayloadOneofCase.EntityMoved,
+            streamTimeout.Token);
+        ulong elapsedTicks =
+            moved.EntityMoved.Tick - movementChanged.ShipStateChanged.Tick;
+        Assert.Equal(
+            movementChanged.ShipStateChanged.Position.X + (10 * elapsedTicks),
+            moved.EntityMoved.Position.X);
+        Assert.Equal(
+            movementChanged.ShipStateChanged.Position.Y,
+            moved.EntityMoved.Position.Y);
+        Assert.Equal(
+            movementChanged.ShipStateChanged.Position.Z,
+            moved.EntityMoved.Position.Z);
 
         using GrpcChannel coordinatorChannel = GrpcChannel.ForAddress(topology.CoordinatorGrpcAddress);
         var directory = new ClusterDirectory.ClusterDirectoryClient(coordinatorChannel);
@@ -143,8 +167,12 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             solarBinding.Value));
         AssertStation(await client.ReadPacketAsync(), stationId);
 
-        SolarShipStateResponse absent = await solar.GetShipStateAsync(stateRequest);
-        Assert.Equal("simulation.entity_not_found", absent.Error.Code);
+        SessionEventEnvelope left = await ReadEventAsync(
+            subscription.ResponseStream,
+            SessionEventEnvelope.PayloadOneofCase.EntityLeft,
+            streamTimeout.Token);
+        Assert.Equal(characterId, left.EntityLeft.CharacterId);
+        Assert.False(await subscription.ResponseStream.MoveNext(streamTimeout.Token));
     }
 
     [Fact]
@@ -298,7 +326,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         }
     }
 
-    private static RequestContext InspectorContext()
+    private static LoginRequestContext InspectorContext()
         => new()
         {
             GatewayId = "topology-inspector",
@@ -313,24 +341,27 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         return PackedRowTestReader.Read(Assert.IsType<PyPackedRow>(Assert.Single(rowset.ListItems)));
     }
 
-    private static async Task<SolarShipState> WaitForMovementAsync(
-        SolarSystemGameplay.SolarSystemGameplayClient client,
-        SolarShipStateRequest request,
-        ulong initialTick)
+    private static GameplayRequestContext GameplayContext()
+        => new()
+        {
+            GatewayId = "topology-inspector",
+            GatewaySessionId = 900,
+            CorrelationId = "topology-gameplay",
+            ClientBuild = 3_396_210,
+        };
+
+    private static async Task<SessionEventEnvelope> ReadEventAsync(
+        IAsyncStreamReader<SessionEventEnvelope> stream,
+        SessionEventEnvelope.PayloadOneofCase expected,
+        CancellationToken cancellationToken)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         while (true)
         {
-            SolarShipStateResponse response = await client.GetShipStateAsync(
-                request,
-                cancellationToken: timeout.Token);
-            Assert.Empty(response.Error?.Code ?? string.Empty);
-            if (response.ShipState.Tick > initialTick)
+            Assert.True(await stream.MoveNext(cancellationToken));
+            if (stream.Current.PayloadCase == expected)
             {
-                return response.ShipState;
+                return stream.Current;
             }
-
-            await Task.Delay(25, timeout.Token);
         }
     }
 

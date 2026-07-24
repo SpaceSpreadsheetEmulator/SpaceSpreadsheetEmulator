@@ -1,21 +1,27 @@
 syntax = "proto3";
 
-package backplane.v1;
-option csharp_namespace = "SpaceSpreadsheetEmulator.Backplane.Contracts.V1";
+package backplane.v2;
+option csharp_namespace = "SpaceSpreadsheetEmulator.Backplane.Contracts.V2";
 
-import "Protos/login_gameplay.proto";
-
-// Provides fenced solar-system gameplay operations to Gateways.
+// Accepts player intent and streams authoritative solar-system output to Gateways.
 service SolarSystemGameplay {
-  rpc Undock (SolarSystemMutationRequest) returns (SolarSystemMutationResponse);
-  rpc Dock (SolarSystemMutationRequest) returns (SolarSystemMutationResponse);
-  rpc SetVelocity (SolarSystemVelocityRequest) returns (SolarShipStateResponse);
-  rpc GetShipState (SolarShipStateRequest) returns (SolarShipStateResponse);
+  rpc RequestUndock (SolarSystemTransitionIntent) returns (SolarSystemCommandResult);
+  rpc RequestDock (SolarSystemTransitionIntent) returns (SolarSystemCommandResult);
+  rpc SetMovementIntent (MovementIntentRequest) returns (SolarSystemCommandResult);
+  rpc SubscribeSession (SessionSubscriptionRequest) returns (stream SessionEventEnvelope);
 }
 
-// Requests a dock or undock transition against an explicitly routed partition epoch.
-message SolarSystemMutationRequest {
-  RequestContext context = 1;
+// Identifies one Gateway request without carrying any client wire representation.
+message GameplayRequestContext {
+  string gateway_id = 1;
+  uint64 gateway_session_id = 2;
+  string correlation_id = 3;
+  uint32 client_build = 4;
+}
+
+// Carries a dock or undock intent to the currently routed system owner.
+message SolarSystemTransitionIntent {
+  GameplayRequestContext context = 1;
   bytes login_ticket = 2;
   string owner_node_id = 3;
   uint64 expected_epoch = 4;
@@ -26,9 +32,22 @@ message SolarSystemMutationRequest {
   string idempotency_key = 9;
 }
 
-// Returns the authoritative character location produced by a solar-system transition.
-message SolarSystemMutationResponse {
-  ServiceError error = 1;
+// Carries a requested heading and speed. Worker decides the applied velocity.
+message MovementIntentRequest {
+  GameplayRequestContext context = 1;
+  bytes login_ticket = 2;
+  string owner_node_id = 3;
+  uint64 expected_epoch = 4;
+  int32 solar_system_id = 5;
+  int64 character_id = 6;
+  int64 ship_id = 7;
+  SolarVector3 direction = 8;
+  double requested_speed = 9;
+}
+
+// Reports whether Worker accepted an intent and the authoritative resulting state.
+message SolarSystemCommandResult {
+  GameplayError error = 1;
   string owner_node_id = 2;
   uint64 epoch = 3;
   int32 solar_system_id = 4;
@@ -38,21 +57,9 @@ message SolarSystemMutationResponse {
   SolarShipState ship_state = 8;
 }
 
-// Requests an authoritative ship velocity change against a fenced partition.
-message SolarSystemVelocityRequest {
-  RequestContext context = 1;
-  bytes login_ticket = 2;
-  string owner_node_id = 3;
-  uint64 expected_epoch = 4;
-  int32 solar_system_id = 5;
-  int64 character_id = 6;
-  int64 ship_id = 7;
-  SolarVector3 velocity = 8;
-}
-
-// Requests the current authoritative state of a ship in a fenced partition.
-message SolarShipStateRequest {
-  RequestContext context = 1;
+// Opens a bounded, cancellable stream for one authenticated player session.
+message SessionSubscriptionRequest {
+  GameplayRequestContext context = 1;
   bytes login_ticket = 2;
   string owner_node_id = 3;
   uint64 expected_epoch = 4;
@@ -61,13 +68,36 @@ message SolarShipStateRequest {
   int64 ship_id = 7;
 }
 
-// Contains an authoritative ship state or a service-level rejection.
-message SolarShipStateResponse {
-  ServiceError error = 1;
-  SolarShipState ship_state = 2;
+// Carries one ordered, fenced snapshot or simulation delta.
+message SessionEventEnvelope {
+  string gateway_id = 1;
+  uint64 gateway_session_id = 2;
+  string owner_node_id = 3;
+  int32 solar_system_id = 4;
+  uint64 epoch = 5;
+  uint64 sequence = 6;
+
+  oneof payload {
+    SessionSnapshot snapshot = 10;
+    SolarShipState entity_entered = 11;
+    SolarShipState entity_moved = 12;
+    SolarShipState ship_state_changed = 13;
+    EntityIdentity entity_left = 14;
+  }
 }
 
-// Captures the authoritative position and velocity of a ship at one simulation tick.
+// Establishes the authoritative starting view for subsequent deltas.
+message SessionSnapshot {
+  repeated SolarShipState entities = 1;
+}
+
+// Identifies an entity which is no longer visible in the subscribed system.
+message EntityIdentity {
+  int64 character_id = 1;
+  int64 ship_id = 2;
+}
+
+// Captures authoritative position and velocity at one simulation tick.
 message SolarShipState {
   int64 character_id = 1;
   int64 ship_id = 2;
@@ -78,9 +108,13 @@ message SolarShipState {
   SolarVector3 velocity = 7;
 }
 
-// Represents a finite three-dimensional protocol vector.
 message SolarVector3 {
   double x = 1;
   double y = 2;
   double z = 3;
+}
+
+message GameplayError {
+  string code = 1;
+  string message = 2;
 }

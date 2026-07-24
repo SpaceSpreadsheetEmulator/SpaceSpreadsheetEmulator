@@ -858,6 +858,8 @@ public class ConnectionIoTests
         AssertSessionStation(await client.ReadPacketAsync(), stationId);
         Assert.Equal(1, gateway.SolarBackend.UndockCount);
         Assert.Equal(1, gateway.SolarBackend.DockCount);
+        Assert.Equal(1, gateway.SolarBackend.SubscribeCount);
+        Assert.Equal(1, gateway.SolarBackend.SubscriptionClosedCount);
     }
 
     [Fact]

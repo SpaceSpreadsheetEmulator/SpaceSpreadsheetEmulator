@@ -11,6 +11,8 @@ internal sealed class WorkerSolarSystemOptions
 
     public int CommandQueueCapacity { get; init; } = 256;
 
+    public int SessionEventQueueCapacity { get; init; } = 64;
+
     public int CheckpointIntervalSeconds { get; init; } = 10;
 
     public List<WorkerSolarSystemAssignmentOptions> Assignments { get; init; } = [];
@@ -18,6 +20,7 @@ internal sealed class WorkerSolarSystemOptions
     public bool HasValidAssignments()
         => !Enabled
             || (CheckpointIntervalSeconds > 0
+                && SessionEventQueueCapacity > 0
                 && Assignments.Count > 0
                 && Assignments.All(assignment =>
                     assignment.SolarSystemId > 0

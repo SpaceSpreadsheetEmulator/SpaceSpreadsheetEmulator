@@ -84,20 +84,21 @@ internal sealed class SolarSystemState
             context.Epoch);
     }
 
-    public SolarShipState SetVelocity(
+    public SolarShipState ApplyMovementIntent(
         SolarCharacter character,
-        SolarVector3 velocity,
+        SolarMovementIntent intent,
         SimulationEpoch expectedEpoch)
     {
         Validate(character, expectedEpoch);
+        ArgumentNullException.ThrowIfNull(intent);
         SolarShipState current = RequiredShip(character);
-        SolarShipState updated = current with { Velocity = velocity };
+        SolarShipState updated = current with { Velocity = intent.ResolveVelocity() };
         shipsByCharacter[character.CharacterId] = updated;
         sequence = checked(sequence + 1);
         return updated;
     }
 
-    public SolarShipState? GetShipState(
+    public SolarShipState? InspectShipState(
         CharacterId characterId,
         long shipId,
         SimulationEpoch expectedEpoch)
@@ -121,10 +122,11 @@ internal sealed class SolarSystemState
         return state;
     }
 
-    public void AdvanceTick()
+    public IReadOnlyList<SolarShipState> AdvanceTick()
     {
         tick = checked(tick + 1);
         sequence = checked(sequence + 1);
+        var moved = new List<SolarShipState>(shipsByCharacter.Count);
         foreach (SolarShipState current in shipsByCharacter.Values.OrderBy(state => state.ShipId).ToArray())
         {
             var updated = current with
@@ -133,7 +135,18 @@ internal sealed class SolarSystemState
                 Position = current.Position.Advance(current.Velocity),
             };
             shipsByCharacter[current.CharacterId] = updated;
+            moved.Add(updated);
         }
+
+        return moved;
+    }
+
+    public IReadOnlyList<SolarShipState> ListShipStates(SimulationEpoch expectedEpoch)
+    {
+        ValidateEpoch(expectedEpoch);
+        return shipsByCharacter.Values
+            .OrderBy(state => state.ShipId)
+            .ToArray();
     }
 
     public SolarSystemSnapshot CaptureSnapshot(SimulationEpoch expectedEpoch)

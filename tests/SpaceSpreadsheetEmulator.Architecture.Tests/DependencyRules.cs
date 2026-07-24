@@ -100,6 +100,31 @@ public class DependencyRules
         }
     }
 
+    [Fact]
+    public void SolarSystemBackplaneUsesIntentCommandsAndStreamedOutput()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string contract = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "SpaceSpreadsheetEmulator.Backplane.Contracts",
+            "Protos",
+            "solar_system_gameplay.proto"));
+
+        Assert.Contains("package backplane.v2;", contract, StringComparison.Ordinal);
+        Assert.Contains("rpc RequestUndock ", contract, StringComparison.Ordinal);
+        Assert.Contains("rpc RequestDock ", contract, StringComparison.Ordinal);
+        Assert.Contains("rpc SetMovementIntent ", contract, StringComparison.Ordinal);
+        Assert.Contains(
+            "rpc SubscribeSession (SessionSubscriptionRequest) returns (stream SessionEventEnvelope);",
+            contract,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("rpc SetVelocity ", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("rpc GetShipState ", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("rpc SetShipPosition ", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("rpc SetDockedState ", contract, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         for (DirectoryInfo? directory = new(AppContext.BaseDirectory);

@@ -39,7 +39,7 @@ internal sealed class SolarSystemWorkflowCoordinator(
             cancellationToken);
         try
         {
-            SolarShipState? existing = await runtime.GetShipStateAsync(
+            SolarShipState? existing = await runtime.InspectShipStateAsync(
                 durable.State.CharacterId,
                 durable.State.ShipId,
                 runtime.Context.Epoch,
@@ -88,7 +88,7 @@ internal sealed class SolarSystemWorkflowCoordinator(
             cancellationToken);
         try
         {
-            SolarShipState? existing = await runtime.GetShipStateAsync(
+            SolarShipState? existing = await runtime.InspectShipStateAsync(
                 durable.State.CharacterId,
                 durable.State.ShipId,
                 runtime.Context.Epoch,
@@ -115,16 +115,16 @@ internal sealed class SolarSystemWorkflowCoordinator(
         }
     }
 
-    public async Task<SolarShipState> SetVelocityAsync(
+    public async Task<SolarShipState> ApplyMovementIntentAsync(
         SolarSystemRequestResolution resolution,
-        SolarVector3 velocity,
+        SolarMovementIntent intent,
         CancellationToken cancellationToken)
     {
         ISolarSystemRuntime runtime = resolution.Runtime!;
         using GateLease lease = await EnterAsync(runtime.Context.SolarSystemId, cancellationToken);
-        SolarShipState state = await runtime.SetVelocityAsync(
+        SolarShipState state = await runtime.ApplyMovementIntentAsync(
             resolution.SolarCharacter!,
-            velocity,
+            intent,
             runtime.Context.Epoch,
             cancellationToken);
         try

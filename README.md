@@ -29,6 +29,13 @@ reconciles owned systems before readiness, checkpoints accepted mutations and ev
 ten seconds, and writes a final checkpoint during normal shutdown. Credential proofs
 and login tickets remain process-local.
 
+Solar-system gameplay uses the intent-oriented `backplane.v2` contract. Gateway sends
+`RequestUndock`, `RequestDock`, and `SetMovementIntent`; Worker decides legality and
+applies accepted commands through the owning system's single-writer mailbox. Gateway
+opens a bounded `SubscribeSession` stream after entering space and validates the
+Worker's fenced initial snapshot and ordered entity/state deltas. Build-specific EVE
+notification mapping remains capture-gated in Gateway.
+
 ## Build and verify
 
 ```bash

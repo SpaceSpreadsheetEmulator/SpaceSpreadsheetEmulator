@@ -7,14 +7,16 @@ using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Options;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
+using SpaceSpreadsheetEmulator.Backplane.Contracts.V2;
 using SpaceSpreadsheetEmulator.Cluster.Contracts.V1;
+using ContractVector3 = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarVector3;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
 /// <summary>
-/// Resolves solar-system ownership and forwards gameplay transitions over versioned gRPC contracts.
+/// Resolves ownership, forwards player intent, and consumes authoritative Worker streams.
 /// </summary>
-public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
+public sealed partial class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
 {
     private const int SolarSystemPartitionKind = 1;
     private readonly GatewayBackplaneOptions options;
@@ -61,6 +63,7 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         {
             return null;
         }
+
         if (!response.Found
             || string.IsNullOrWhiteSpace(response.OwnerNodeId)
             || response.Epoch == 0
@@ -70,13 +73,11 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         }
 
         var route = new SolarSystemRoute(solarSystemId, response.OwnerNodeId, response.Epoch, endpoint);
-        routes[solarSystemId] = new CachedRoute(
-            route,
-            now.AddSeconds(options.RouteCacheSeconds));
+        routes[solarSystemId] = new CachedRoute(route, now.AddSeconds(options.RouteCacheSeconds));
         return route;
     }
 
-    public Task<SolarSystemTransition?> UndockAsync(
+    public Task<SolarSystemTransition?> RequestUndockAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
@@ -84,7 +85,7 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         int stationId,
         long clientCallId,
         CancellationToken cancellationToken)
-        => MutateAsync(
+        => RequestTransitionAsync(
             route,
             gatewaySessionId,
             loginTicket,
@@ -94,7 +95,7 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
             dock: false,
             cancellationToken);
 
-    public Task<SolarSystemTransition?> DockAsync(
+    public Task<SolarSystemTransition?> RequestDockAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
@@ -102,7 +103,7 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         int stationId,
         long clientCallId,
         CancellationToken cancellationToken)
-        => MutateAsync(
+        => RequestTransitionAsync(
             route,
             gatewaySessionId,
             loginTicket,
@@ -111,6 +112,48 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
             clientCallId,
             dock: true,
             cancellationToken);
+
+    public async Task<SolarSystemEntityState?> SetMovementIntentAsync(
+        SolarSystemRoute route,
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CharacterSummary character,
+        SolarSystemMovementIntent intent,
+        CancellationToken cancellationToken)
+    {
+        WorkerConnection worker = GetWorker(route);
+        var request = new MovementIntentRequest
+        {
+            Context = CreateContext(gatewaySessionId),
+            LoginTicket = ByteString.CopyFrom(loginTicket.Span),
+            OwnerNodeId = route.OwnerNodeId,
+            ExpectedEpoch = route.Epoch,
+            SolarSystemId = character.SolarSystemId,
+            CharacterId = character.CharacterId,
+            ShipId = character.ShipId,
+            Direction = new ContractVector3
+            {
+                X = intent.DirectionX,
+                Y = intent.DirectionY,
+                Z = intent.DirectionZ,
+            },
+            RequestedSpeed = intent.RequestedSpeed,
+        };
+        try
+        {
+            SolarSystemCommandResult response = await worker.Client.SetMovementIntentAsync(
+                request,
+                cancellationToken: cancellationToken);
+            return string.IsNullOrEmpty(response.Error?.Code) && response.ShipState is not null
+                ? Map(response.ShipState)
+                : null;
+        }
+        catch (RpcException error) when (IsRouteFailure(error, cancellationToken))
+        {
+            routes.TryRemove(route.SolarSystemId, out _);
+            return null;
+        }
+    }
 
     public void Dispose()
     {
@@ -121,7 +164,7 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         }
     }
 
-    private async Task<SolarSystemTransition?> MutateAsync(
+    private async Task<SolarSystemTransition?> RequestTransitionAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
@@ -131,10 +174,8 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
         bool dock,
         CancellationToken cancellationToken)
     {
-        WorkerConnection worker = workers.GetOrAdd(
-            route.Endpoint.AbsoluteUri,
-            endpoint => WorkerConnection.Create(endpoint));
-        var request = new SolarSystemMutationRequest
+        WorkerConnection worker = GetWorker(route);
+        var request = new SolarSystemTransitionIntent
         {
             Context = CreateContext(gatewaySessionId),
             LoginTicket = ByteString.CopyFrom(loginTicket.Span),
@@ -149,20 +190,19 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
                 clientCallId,
                 dock ? "dock" : "undock"),
         };
-        SolarSystemMutationResponse response;
+        SolarSystemCommandResult response;
         try
         {
             response = dock
-                ? await worker.Client.DockAsync(request, cancellationToken: cancellationToken)
-                : await worker.Client.UndockAsync(request, cancellationToken: cancellationToken);
+                ? await worker.Client.RequestDockAsync(request, cancellationToken: cancellationToken)
+                : await worker.Client.RequestUndockAsync(request, cancellationToken: cancellationToken);
         }
-        catch (RpcException error) when (
-            !cancellationToken.IsCancellationRequested
-            && error.StatusCode is StatusCode.Unavailable or StatusCode.DeadlineExceeded or StatusCode.Cancelled)
+        catch (RpcException error) when (IsRouteFailure(error, cancellationToken))
         {
             routes.TryRemove(route.SolarSystemId, out _);
             return null;
         }
+
         if (!string.IsNullOrEmpty(response.Error?.Code))
         {
             routes.TryRemove(route.SolarSystemId, out _);
@@ -177,7 +217,12 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
             response.Epoch);
     }
 
-    private RequestContext CreateContext(ulong gatewaySessionId)
+    private WorkerConnection GetWorker(SolarSystemRoute route)
+        => workers.GetOrAdd(
+            route.Endpoint.AbsoluteUri,
+            endpoint => WorkerConnection.Create(endpoint));
+
+    private GameplayRequestContext CreateContext(ulong gatewaySessionId)
         => new()
         {
             GatewayId = options.GatewayId,
@@ -193,7 +238,7 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
     {
         string material = string.Join(
             '\u001f',
-            "sse-location-v1",
+            "sse-location-v2",
             options.GatewayId,
             gatewaySessionId.ToString(CultureInfo.InvariantCulture),
             clientCallId.ToString(CultureInfo.InvariantCulture),
@@ -203,6 +248,12 @@ public sealed class GrpcSolarSystemBackend : ISolarSystemBackend, IDisposable
             .Replace('+', '-')
             .Replace('/', '_');
     }
+
+    private static bool IsRouteFailure(RpcException error, CancellationToken cancellationToken)
+        => !cancellationToken.IsCancellationRequested
+            && error.StatusCode is StatusCode.Unavailable
+                or StatusCode.DeadlineExceeded
+                or StatusCode.Cancelled;
 
     private sealed record CachedRoute(SolarSystemRoute Route, DateTimeOffset ExpiresAt);
 

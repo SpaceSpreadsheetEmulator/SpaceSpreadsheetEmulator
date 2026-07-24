@@ -6,7 +6,7 @@ namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 /// <summary>
 /// Serializes commands and ticks through a bounded queue for one solar-system partition.
 /// </summary>
-public sealed class SolarSystemRuntime : ISolarSystemRuntime
+public sealed partial class SolarSystemRuntime : ISolarSystemRuntime
 {
     private readonly Channel<RuntimeCommand> commands;
     private readonly ISimulationTickSource tickSource;
@@ -17,14 +17,18 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         SolarSystemRuntimeContext context,
         int commandQueueCapacity,
         ISimulationTickSource tickSource,
-        SolarSystemSnapshot? snapshot = null)
+        SolarSystemSnapshot? snapshot = null,
+        int sessionEventQueueCapacity = 64)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(commandQueueCapacity);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sessionEventQueueCapacity);
         ArgumentNullException.ThrowIfNull(tickSource);
 
         Context = context;
         this.tickSource = tickSource;
+        this.sessionEventQueueCapacity = sessionEventQueueCapacity;
+        eventSequence = snapshot?.LastSequence ?? 0;
         state = new SolarSystemState(context, snapshot);
         commands = Channel.CreateBounded<RuntimeCommand>(new BoundedChannelOptions(commandQueueCapacity)
         {
@@ -52,19 +56,21 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         CancellationToken cancellationToken = default)
         => SubmitAsync(new DockCommand(character, stationId, expectedEpoch, cancellationToken), cancellationToken);
 
-    public Task<SolarShipState> SetVelocityAsync(
+    public Task<SolarShipState> ApplyMovementIntentAsync(
         SolarCharacter character,
-        SolarVector3 velocity,
+        SolarMovementIntent intent,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken = default)
-        => SubmitAsync(new SetVelocityCommand(character, velocity, expectedEpoch, cancellationToken), cancellationToken);
+        => SubmitAsync(
+            new ApplyMovementIntentCommand(character, intent, expectedEpoch, cancellationToken),
+            cancellationToken);
 
-    public Task<SolarShipState?> GetShipStateAsync(
+    public Task<SolarShipState?> InspectShipStateAsync(
         CharacterId characterId,
         long shipId,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken = default)
-        => SubmitAsync(new GetShipStateCommand(characterId, shipId, expectedEpoch, cancellationToken), cancellationToken);
+        => SubmitAsync(new InspectShipStateCommand(characterId, shipId, expectedEpoch, cancellationToken), cancellationToken);
 
     public Task<SolarSystemSnapshot> CaptureSnapshotAsync(
         SimulationEpoch expectedEpoch,
@@ -93,7 +99,7 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
                     continue;
                 }
 
-                command.Execute(state);
+                command.Execute(this);
             }
 
             Volatile.Write(ref runState, (int)SolarSystemRuntimeStatus.Stopped);
@@ -115,6 +121,8 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
             {
                 pending.Cancel(cancellationToken);
             }
+
+            CompleteSubscriptions();
 
             try
             {
@@ -154,7 +162,7 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
     {
         public CancellationToken CancellationToken { get; } = cancellationToken;
 
-        public abstract void Execute(SolarSystemState state);
+        public abstract void Execute(SolarSystemRuntime runtime);
 
         public abstract void Cancel(CancellationToken cancellationToken);
     }
@@ -165,11 +173,11 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         public TaskCompletionSource<TResult> Completion { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public sealed override void Execute(SolarSystemState state)
+        public sealed override void Execute(SolarSystemRuntime runtime)
         {
             try
             {
-                Completion.TrySetResult(Apply(state));
+                Completion.TrySetResult(Apply(runtime));
             }
             catch (Exception error) when (
                 error is ArgumentException or InvalidOperationException or OverflowException)
@@ -186,7 +194,7 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         public override void Cancel(CancellationToken cancellationToken)
             => Completion.TrySetCanceled(cancellationToken);
 
-        protected abstract TResult Apply(SolarSystemState state);
+        protected abstract TResult Apply(SolarSystemRuntime runtime);
     }
 
     private sealed class UndockCommand(
@@ -196,8 +204,20 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         CancellationToken cancellationToken)
         : ResultCommand<SolarShipState>(cancellationToken)
     {
-        protected override SolarShipState Apply(SolarSystemState state)
-            => state.Undock(character, entryPosition, expectedEpoch);
+        protected override SolarShipState Apply(SolarSystemRuntime runtime)
+        {
+            SolarShipState? existing = runtime.state.InspectShipState(
+                character.CharacterId,
+                character.ShipId,
+                expectedEpoch);
+            SolarShipState entered = runtime.state.Undock(character, entryPosition, expectedEpoch);
+            if (existing is null)
+            {
+                runtime.Publish(sequence => new SolarSystemEntityEntered(sequence, entered));
+            }
+
+            return entered;
+        }
     }
 
     private sealed class DockCommand(
@@ -207,30 +227,45 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         CancellationToken cancellationToken)
         : ResultCommand<SolarCharacterLocation>(cancellationToken)
     {
-        protected override SolarCharacterLocation Apply(SolarSystemState state)
-            => state.Dock(character, stationId, expectedEpoch);
+        protected override SolarCharacterLocation Apply(SolarSystemRuntime runtime)
+        {
+            SolarCharacterLocation location = runtime.state.Dock(character, stationId, expectedEpoch);
+            runtime.Publish(sequence => new SolarSystemEntityLeft(
+                sequence,
+                character.CharacterId,
+                character.ShipId));
+            runtime.CompleteCharacterSubscription(character.CharacterId);
+            return location;
+        }
     }
 
-    private sealed class SetVelocityCommand(
+    private sealed class ApplyMovementIntentCommand(
         SolarCharacter character,
-        SolarVector3 velocity,
+        SolarMovementIntent intent,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken)
         : ResultCommand<SolarShipState>(cancellationToken)
     {
-        protected override SolarShipState Apply(SolarSystemState state)
-            => state.SetVelocity(character, velocity, expectedEpoch);
+        protected override SolarShipState Apply(SolarSystemRuntime runtime)
+        {
+            SolarShipState changed = runtime.state.ApplyMovementIntent(
+                character,
+                intent,
+                expectedEpoch);
+            runtime.Publish(sequence => new SolarSystemShipStateChanged(sequence, changed));
+            return changed;
+        }
     }
 
-    private sealed class GetShipStateCommand(
+    private sealed class InspectShipStateCommand(
         CharacterId characterId,
         long shipId,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken)
         : ResultCommand<SolarShipState?>(cancellationToken)
     {
-        protected override SolarShipState? Apply(SolarSystemState state)
-            => state.GetShipState(characterId, shipId, expectedEpoch);
+        protected override SolarShipState? Apply(SolarSystemRuntime runtime)
+            => runtime.state.InspectShipState(characterId, shipId, expectedEpoch);
     }
 
     private sealed class CaptureSnapshotCommand(
@@ -238,16 +273,23 @@ public sealed class SolarSystemRuntime : ISolarSystemRuntime
         CancellationToken cancellationToken)
         : ResultCommand<SolarSystemSnapshot>(cancellationToken)
     {
-        protected override SolarSystemSnapshot Apply(SolarSystemState state)
-            => state.CaptureSnapshot(expectedEpoch);
+        protected override SolarSystemSnapshot Apply(SolarSystemRuntime runtime)
+            => runtime.state.CaptureSnapshot(expectedEpoch);
     }
 
     private sealed class TickCommand(CancellationToken cancellationToken) : RuntimeCommand(cancellationToken)
     {
-        public override void Execute(SolarSystemState state) => state.AdvanceTick();
+        public override void Execute(SolarSystemRuntime runtime)
+        {
+            foreach (SolarShipState moved in runtime.state.AdvanceTick())
+            {
+                runtime.Publish(sequence => new SolarSystemEntityMoved(sequence, moved));
+            }
+        }
 
         public override void Cancel(CancellationToken cancellationToken)
         {
         }
     }
+
 }

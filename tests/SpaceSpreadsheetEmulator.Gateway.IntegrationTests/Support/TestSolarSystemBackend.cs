@@ -5,9 +5,16 @@ namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 
 internal sealed class TestSolarSystemBackend : ISolarSystemBackend
 {
+    private TaskCompletionSource streamCompleted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public int UndockCount { get; private set; }
 
     public int DockCount { get; private set; }
+
+    public int SubscribeCount { get; private set; }
+
+    public int SubscriptionClosedCount { get; private set; }
 
     public Task<SolarSystemRoute?> ResolveAsync(
         int solarSystemId,
@@ -18,7 +25,7 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
             7,
             new Uri("http://127.0.0.1:7000")));
 
-    public Task<SolarSystemTransition?> UndockAsync(
+    public Task<SolarSystemTransition?> RequestUndockAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
@@ -28,6 +35,12 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
         CancellationToken cancellationToken)
     {
         UndockCount++;
+        if (streamCompleted.Task.IsCompleted)
+        {
+            streamCompleted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
         return Task.FromResult<SolarSystemTransition?>(new SolarSystemTransition(
             character.SolarSystemId,
             character.CharacterId,
@@ -36,7 +49,7 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
             route.Epoch));
     }
 
-    public Task<SolarSystemTransition?> DockAsync(
+    public Task<SolarSystemTransition?> RequestDockAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
@@ -46,11 +59,51 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
         CancellationToken cancellationToken)
     {
         DockCount++;
+        streamCompleted.TrySetResult();
         return Task.FromResult<SolarSystemTransition?>(new SolarSystemTransition(
             character.SolarSystemId,
             character.CharacterId,
             character.ShipId,
             stationId,
             route.Epoch));
+    }
+
+    public Task<SolarSystemEntityState?> SetMovementIntentAsync(
+        SolarSystemRoute route,
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CharacterSummary character,
+        SolarSystemMovementIntent intent,
+        CancellationToken cancellationToken)
+        => Task.FromResult<SolarSystemEntityState?>(null);
+
+    public async IAsyncEnumerable<SolarSystemSessionEvent> SubscribeSessionAsync(
+        SolarSystemRoute route,
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CharacterSummary character,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        SubscribeCount++;
+        try
+        {
+            yield return new SolarSystemSessionEvent(
+                SolarSystemSessionEventKind.Snapshot,
+                "gateway-test",
+                gatewaySessionId,
+                route.OwnerNodeId,
+                route.SolarSystemId,
+                route.Epoch,
+                0,
+                [],
+                null,
+                null,
+                null);
+            await streamCompleted.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            SubscriptionClosedCount++;
+        }
     }
 }

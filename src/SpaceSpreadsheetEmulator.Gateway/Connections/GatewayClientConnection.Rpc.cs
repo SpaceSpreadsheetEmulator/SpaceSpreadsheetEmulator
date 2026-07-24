@@ -322,7 +322,7 @@ internal sealed partial class GatewayClientConnection
             return Result(PyNull.Instance);
         }
 
-        SolarSystemTransition? transition = await solarSystemBackend.UndockAsync(
+        SolarSystemTransition? transition = await solarSystemBackend.RequestUndockAsync(
             route,
             gatewaySessionId,
             loginSession!.LoginTicket,
@@ -338,6 +338,7 @@ internal sealed partial class GatewayClientConnection
         int? previousStationId = selectedCharacter.StationId;
         ApplyTransition(transition);
         solarSystemBinding = $"N=solarsystem:{transition.SolarSystemId}:{transition.Epoch}";
+        await StartSolarSystemSubscriptionAsync(route, cancellationToken);
         return Result(
             new PyText($"N=ship:{transition.ShipId}:{transition.Epoch}"),
             afterResponse:
@@ -369,6 +370,7 @@ internal sealed partial class GatewayClientConnection
             }
 
             solarSystemBinding = $"N=solarsystem:{route.SolarSystemId}:{route.Epoch}";
+            await StartSolarSystemSubscriptionAsync(route, cancellationToken);
         }
 
         return solarSystemBinding is null
@@ -398,7 +400,7 @@ internal sealed partial class GatewayClientConnection
             return Result(PyNull.Instance);
         }
 
-        SolarSystemTransition? transition = await solarSystemBackend.DockAsync(
+        SolarSystemTransition? transition = await solarSystemBackend.RequestDockAsync(
             route,
             gatewaySessionId,
             loginSession!.LoginTicket,
@@ -413,6 +415,7 @@ internal sealed partial class GatewayClientConnection
 
         ApplyTransition(transition);
         solarSystemBinding = null;
+        await StopSolarSystemSubscriptionAsync(cancel: false);
         return Result(
             PyNull.Instance,
             afterResponse:

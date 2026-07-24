@@ -21,6 +21,47 @@ public sealed record SolarSystemTransition(
     int? StationId,
     ulong Epoch);
 
+public sealed record SolarSystemMovementIntent(
+    double DirectionX,
+    double DirectionY,
+    double DirectionZ,
+    double RequestedSpeed);
+
+public sealed record SolarSystemEntityState(
+    long CharacterId,
+    long ShipId,
+    int SolarSystemId,
+    ulong Epoch,
+    ulong Tick,
+    double PositionX,
+    double PositionY,
+    double PositionZ,
+    double VelocityX,
+    double VelocityY,
+    double VelocityZ);
+
+public enum SolarSystemSessionEventKind
+{
+    Snapshot,
+    EntityEntered,
+    EntityMoved,
+    ShipStateChanged,
+    EntityLeft,
+}
+
+public sealed record SolarSystemSessionEvent(
+    SolarSystemSessionEventKind Kind,
+    string GatewayId,
+    ulong GatewaySessionId,
+    string OwnerNodeId,
+    int SolarSystemId,
+    ulong Epoch,
+    ulong Sequence,
+    IReadOnlyList<SolarSystemEntityState> Snapshot,
+    SolarSystemEntityState? Entity,
+    long? CharacterId,
+    long? ShipId);
+
 /// <summary>
 /// Defines the Gateway-facing boundary for routed solar-system gameplay operations.
 /// </summary>
@@ -30,7 +71,7 @@ public interface ISolarSystemBackend
         int solarSystemId,
         CancellationToken cancellationToken);
 
-    Task<SolarSystemTransition?> UndockAsync(
+    Task<SolarSystemTransition?> RequestUndockAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
@@ -39,12 +80,27 @@ public interface ISolarSystemBackend
         long clientCallId,
         CancellationToken cancellationToken);
 
-    Task<SolarSystemTransition?> DockAsync(
+    Task<SolarSystemTransition?> RequestDockAsync(
         SolarSystemRoute route,
         ulong gatewaySessionId,
         ReadOnlyMemory<byte> loginTicket,
         CharacterSummary character,
         int stationId,
         long clientCallId,
+        CancellationToken cancellationToken);
+
+    Task<SolarSystemEntityState?> SetMovementIntentAsync(
+        SolarSystemRoute route,
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CharacterSummary character,
+        SolarSystemMovementIntent intent,
+        CancellationToken cancellationToken);
+
+    IAsyncEnumerable<SolarSystemSessionEvent> SubscribeSessionAsync(
+        SolarSystemRoute route,
+        ulong gatewaySessionId,
+        ReadOnlyMemory<byte> loginTicket,
+        CharacterSummary character,
         CancellationToken cancellationToken);
 }

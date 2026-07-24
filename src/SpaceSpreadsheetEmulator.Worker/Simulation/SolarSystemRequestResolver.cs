@@ -1,5 +1,5 @@
 using Google.Protobuf;
-using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
+using SpaceSpreadsheetEmulator.Backplane.Contracts.V2;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
@@ -17,7 +17,7 @@ internal sealed class SolarSystemRequestResolver(
     ISolarSystemRuntimeRegistry runtimes)
 {
     public async Task<SolarSystemRequestResolution> ResolveAsync(
-        RequestContext? context,
+        GameplayRequestContext? context,
         ByteString loginTicket,
         string ownerNodeId,
         ulong expectedEpoch,
@@ -87,10 +87,10 @@ internal sealed record SolarSystemRequestResolution(
     ISolarSystemRuntime? Runtime,
     PlayableCharacterState? Character,
     SolarCharacter? SolarCharacter,
-    ServiceError? Error)
+    GameplayError? Error)
 {
     public static SolarSystemRequestResolution Failed(string code, string message)
-        => new(null, null, null, new ServiceError { Code = code, Message = message });
+        => new(null, null, null, new GameplayError { Code = code, Message = message });
 
     public static SolarSystemRequestResolution Succeeded(
         ISolarSystemRuntime runtime,

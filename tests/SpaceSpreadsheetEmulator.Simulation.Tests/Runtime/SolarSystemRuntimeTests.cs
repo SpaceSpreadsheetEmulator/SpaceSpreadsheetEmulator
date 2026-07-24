@@ -21,7 +21,10 @@ public sealed class SolarSystemRuntimeTests
         SolarShipState entered = await runtime.UndockAsync(Character, entry, Epoch);
         SolarShipState enteredAgain = await runtime.UndockAsync(Character, new SolarVector3(1, 1, 1), Epoch);
         var velocity = new SolarVector3(10, -2, 0.5);
-        SolarShipState velocitySet = await runtime.SetVelocityAsync(Character, velocity, Epoch);
+        SolarShipState velocitySet = await runtime.ApplyMovementIntentAsync(
+            Character,
+            IntentFromVelocity(velocity),
+            Epoch);
 
         Assert.Equal(entry, entered.Position);
         Assert.Equal(entered, enteredAgain);
@@ -35,7 +38,7 @@ public sealed class SolarSystemRuntimeTests
         Assert.Equal(1ul, moved.Tick);
 
         SolarCharacterLocation docked = await runtime.DockAsync(Character, 60_000_004, Epoch);
-        SolarShipState? absent = await runtime.GetShipStateAsync(
+        SolarShipState? absent = await runtime.InspectShipStateAsync(
             Character.CharacterId,
             Character.ShipId,
             Epoch);
@@ -58,7 +61,10 @@ public sealed class SolarSystemRuntimeTests
         await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
 
         InvalidOperationException stale = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => runtime.SetVelocityAsync(Character, SolarVector3.Zero, new SimulationEpoch(6)));
+            () => runtime.ApplyMovementIntentAsync(
+                Character,
+                new SolarMovementIntent(SolarVector3.Zero, 0),
+                new SimulationEpoch(6)));
         var anotherShip = Character with { ShipId = Character.ShipId + 1 };
         InvalidOperationException conflict = await Assert.ThrowsAsync<InvalidOperationException>(
             () => runtime.UndockAsync(anotherShip, SolarVector3.Zero, Epoch));
@@ -91,12 +97,18 @@ public sealed class SolarSystemRuntimeTests
 
         await first.UndockAsync(Character, SolarVector3.Zero, Epoch);
         await second.UndockAsync(secondCharacter, SolarVector3.Zero, secondEpoch);
-        await first.SetVelocityAsync(Character, new SolarVector3(5, 0, 0), Epoch);
-        await second.SetVelocityAsync(secondCharacter, new SolarVector3(0, 7, 0), secondEpoch);
+        await first.ApplyMovementIntentAsync(
+            Character,
+            new SolarMovementIntent(new SolarVector3(1, 0, 0), 5),
+            Epoch);
+        await second.ApplyMovementIntentAsync(
+            secondCharacter,
+            new SolarMovementIntent(new SolarVector3(0, 1, 0), 7),
+            secondEpoch);
 
         firstTicks.Advance();
         SolarShipState firstMoved = await WaitForTickAsync(first, Character, Epoch, 1);
-        SolarShipState? secondStill = await second.GetShipStateAsync(
+        SolarShipState? secondStill = await second.InspectShipStateAsync(
             secondCharacter.CharacterId,
             secondCharacter.ShipId,
             secondEpoch);
@@ -149,7 +161,7 @@ public sealed class SolarSystemRuntimeTests
         using var queueTimeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => runtime.GetShipStateAsync(
+            () => runtime.InspectShipStateAsync(
                 Character.CharacterId,
                 Character.ShipId,
                 Epoch,
@@ -172,7 +184,10 @@ public sealed class SolarSystemRuntimeTests
         using var firstStopping = new CancellationTokenSource();
         Task firstRun = first.RunAsync(firstStopping.Token);
         await first.UndockAsync(Character, new SolarVector3(10, 20, 30), Epoch);
-        await first.SetVelocityAsync(Character, new SolarVector3(2, -3, 4), Epoch);
+        await first.ApplyMovementIntentAsync(
+            Character,
+            IntentFromVelocity(new SolarVector3(2, -3, 4)),
+            Epoch);
         firstTicks.Advance();
         SolarShipState before = await WaitForTickAsync(first, Character, Epoch, 1);
         SolarSystemSnapshot snapshot = await first.CaptureSnapshotAsync(Epoch);
@@ -187,7 +202,7 @@ public sealed class SolarSystemRuntimeTests
             snapshot);
         using var secondStopping = new CancellationTokenSource();
         Task secondRun = restored.RunAsync(secondStopping.Token);
-        SolarShipState? restoredState = await restored.GetShipStateAsync(
+        SolarShipState? restoredState = await restored.InspectShipStateAsync(
             Character.CharacterId,
             Character.ShipId,
             new SimulationEpoch(8));
@@ -280,7 +295,7 @@ public sealed class SolarSystemRuntimeTests
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         while (true)
         {
-            SolarShipState? state = await runtime.GetShipStateAsync(
+            SolarShipState? state = await runtime.InspectShipStateAsync(
                 character.CharacterId,
                 character.ShipId,
                 epoch,
@@ -292,5 +307,14 @@ public sealed class SolarSystemRuntimeTests
 
             await Task.Yield();
         }
+    }
+
+    private static SolarMovementIntent IntentFromVelocity(SolarVector3 velocity)
+    {
+        double speed = Math.Sqrt(
+            (velocity.X * velocity.X)
+            + (velocity.Y * velocity.Y)
+            + (velocity.Z * velocity.Z));
+        return new SolarMovementIntent(velocity, speed);
     }
 }

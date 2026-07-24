@@ -23,13 +23,19 @@ public interface ISolarSystemRuntime
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken = default);
 
-    Task<SolarShipState> SetVelocityAsync(
+    Task<SolarShipState> ApplyMovementIntentAsync(
         SolarCharacter character,
-        SolarVector3 velocity,
+        SolarMovementIntent intent,
         SimulationEpoch expectedEpoch,
         CancellationToken cancellationToken = default);
 
-    Task<SolarShipState?> GetShipStateAsync(
+    Task<SolarSystemSubscription> SubscribeSessionAsync(
+        CharacterId characterId,
+        long shipId,
+        SimulationEpoch expectedEpoch,
+        CancellationToken cancellationToken = default);
+
+    Task<SolarShipState?> InspectShipStateAsync(
         CharacterId characterId,
         long shipId,
         SimulationEpoch expectedEpoch,
