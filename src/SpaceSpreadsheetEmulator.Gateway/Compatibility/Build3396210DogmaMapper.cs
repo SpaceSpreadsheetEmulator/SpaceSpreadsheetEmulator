@@ -6,16 +6,16 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 namespace SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
 /// <summary>
-/// Builds the minimal docked starter-ship dogma state observed for build 3396210.
+/// Builds the minimal starter-ship dogma state observed for build 3396210.
 /// </summary>
 internal static class Build3396210DogmaMapper
 {
     public static PyObject CreateAllInfo(CharacterSummary character, DateTimeOffset observedAt)
     {
         ArgumentNullException.ThrowIfNull(character);
-        if (!character.HasStationId || character.ShipId <= 0)
+        if (character.ShipId <= 0 || character.SolarSystemId <= 0)
         {
-            throw new ArgumentException("Dogma bootstrap requires a docked active ship.", nameof(character));
+            throw new ArgumentException("Dogma bootstrap requires an active ship.", nameof(character));
         }
 
         var timestamp = new PyBigInteger(new BigInteger(observedAt.UtcDateTime.ToFileTimeUtc()));
@@ -32,7 +32,11 @@ internal static class Build3396210DogmaMapper
                     character.CharacterId,
                     Build3396210InventoryMapper.CreateCharacter(character),
                     timestamp))),
-            new PyTuple(new PyInteger(4), new PyList()));
+            new PyTuple(
+                new PyInteger(4),
+                new PyList(),
+                new PyList(),
+                new PyList()));
 
         return KeyValue(
             Entry("systemWideEffectsOnShip", new PyDictionary()),

@@ -15,15 +15,15 @@ internal sealed partial class GatewayClientConnection
     private string? inventoryBrokerBinding;
 
     private RpcDispatchResult ResolveInventoryBroker(MachoRpcRequest request)
-        => HasDockedInventoryObject(request.Arguments)
+        => HasSelectedLocationObject(request.Arguments)
             ? Result(new PyInteger(ProxyNodeId))
             : Result(PyNull.Instance);
 
     private RpcDispatchResult BindInventoryBroker(MachoRpcRequest request)
     {
-        if (selectedCharacter is not { HasStationId: true } character
+        if (selectedCharacter is not { } character
             || request.Arguments.Items.Length != 2
-            || !HasDockedInventoryObject(new PyTuple(request.Arguments.Items[0]))
+            || !HasSelectedLocationObject(new PyTuple(request.Arguments.Items[0]))
             || Unwrap(request.Arguments.Items[1]) is not PyTuple { Items.Length: 3 } nested
             || Unwrap(nested.Items[1]) is not PyTuple { Items.Length: 2 } nestedArguments
             || !TryReadInitialInventory(
@@ -71,13 +71,15 @@ internal sealed partial class GatewayClientConnection
 
     private RpcDispatchResult GetInventoryFromId(MachoRpcRequest request)
     {
-        if (selectedCharacter is not { HasStationId: true } character
+        if (selectedCharacter is not { } character
             || request.BoundObject != inventoryBrokerBinding
             || request.Arguments.Items.Length != 2
             || !TryInteger(request.Arguments.Items[0], out long itemId)
             || (itemId != character.CharacterId
                 && itemId != character.ShipId
-                && itemId != character.StationId))
+                && (character.HasStationId
+                    ? itemId != character.StationId
+                    : itemId != character.SolarSystemId)))
         {
             return Result(PyNull.Instance);
         }
@@ -89,7 +91,7 @@ internal sealed partial class GatewayClientConnection
 
     private RpcDispatchResult GetSelfInventoryItem(MachoRpcRequest request)
     {
-        if (selectedCharacter is not { HasStationId: true } character
+        if (selectedCharacter is not { } character
             || request.Arguments.Items.Length != 0
             || request.BoundObject is null
             || !inventoryBindings.TryGetValue(request.BoundObject, out long itemId))
@@ -101,7 +103,7 @@ internal sealed partial class GatewayClientConnection
         {
             var id when id == character.ShipId
                 => Result(Build3396210InventoryMapper.CreateActiveShip(character)),
-            var id when id == character.StationId
+            var id when character.HasStationId && id == character.StationId
                 => Result(Build3396210InventoryMapper.CreateStation(character)),
             _ => Result(PyNull.Instance),
         };
@@ -193,14 +195,15 @@ internal sealed partial class GatewayClientConnection
         return true;
     }
 
-    private bool HasDockedInventoryObject(PyTuple arguments)
-        => selectedCharacter is { HasStationId: true } character
+    private bool HasSelectedLocationObject(PyTuple arguments)
+        => selectedCharacter is { } character
             && arguments.Items.Length == 1
             && Unwrap(arguments.Items[0]) is PyTuple { Items.Length: 2 } inventoryObject
-            && TryInteger(inventoryObject.Items[0], out long stationId)
-            && stationId == character.StationId
+            && TryInteger(inventoryObject.Items[0], out long locationId)
             && TryInteger(inventoryObject.Items[1], out long groupId)
-            && groupId == 15;
+            && (character.HasStationId
+                ? locationId == character.StationId && groupId == 15
+                : locationId == character.SolarSystemId && groupId == 5);
 
     private static string CreateInventoryBinding(long callId, int suffix)
         => $"N={ProxyNodeId}:{checked((callId * 2) + suffix + 10_000)}";

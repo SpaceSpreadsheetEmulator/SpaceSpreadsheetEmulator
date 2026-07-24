@@ -10,11 +10,11 @@ internal sealed partial class GatewayClientConnection
     private string? characterManagerBinding;
     private string? warRegistryBinding;
 
-    private RpcDispatchResult? GetStationBootstrapResponse(
+    private RpcDispatchResult? GetCharacterBootstrapResponse(
         string route,
         MachoRpcRequest request)
     {
-        if (selectedCharacter is not { HasStationId: true } character)
+        if (selectedCharacter is not { } character)
         {
             return null;
         }
@@ -68,7 +68,7 @@ internal sealed partial class GatewayClientConnection
                 => Result(PyNull.Instance),
             "dynamicBountyMgr.GetOutputForClientSolarSystem"
                 => Result(new PyTuple(new PyInteger(1), new PyBoolean(false))),
-            "station.GetGuests"
+            "station.GetGuests" when character.HasStationId
                 => Result(Build3396210StationBootstrapMapper.CreateStationGuests(character)),
             "chatAuthenticationService.GetAuthenticationToken"
                 => Result(new PyText(string.Empty)),
@@ -106,9 +106,9 @@ internal sealed partial class GatewayClientConnection
                 => Result(new PyList()),
             "air_npe.get_air_npe_state"
                 => Result(new PyInteger(3)),
-            "charMgr.MachoResolveObject"
+            "charMgr.MachoResolveObject" when character.HasStationId
                 => ResolveCharacterManager(request),
-            "charMgr.MachoBindObject"
+            "charMgr.MachoBindObject" when character.HasStationId
                 => BindCharacterManager(request),
             "charMgr.GetPublicInfo"
                 => Result(Build3396210StationBootstrapMapper.CreatePublicCharacterInfo(character)),

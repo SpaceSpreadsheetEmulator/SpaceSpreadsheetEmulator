@@ -212,14 +212,27 @@ public class ConnectionIoTests
                     new PyTuple(new PyBoolean(true), new PyBoolean(true), PyNull.Instance),
                     new PyDictionary()))));
         Assert.Equal(2, dogmaBinding.Items.Length);
-        Assert.StartsWith("N=1:", LeaseBinding(dogmaBinding.Items[0]), StringComparison.Ordinal);
+        string dogmaLease = LeaseBinding(dogmaBinding.Items[0]);
+        Assert.StartsWith("N=1:", dogmaLease, StringComparison.Ordinal);
         PyObject allInfo = Assert.IsType<PyObject>(dogmaBinding.Items[1]);
         Assert.Equal("utillib.KeyVal", Text(allInfo.Type));
         PyDictionary dogmaState = Assert.IsType<PyDictionary>(allInfo.State);
         Assert.Equal(190_000_007, Assert.IsType<PyInteger>(Value(dogmaState, "activeShipID")).Value);
         Assert.Single(Assert.IsType<PyDictionary>(Value(dogmaState, "shipInfo")).Entries);
-        Assert.Equal(2, Assert.IsType<PyTuple>(Value(dogmaState, "charInfo")).Items.Length);
+        PyTuple charInfo = Assert.IsType<PyTuple>(Value(dogmaState, "charInfo"));
+        Assert.Equal(2, charInfo.Items.Length);
+        Assert.Equal(4, Assert.IsType<PyTuple>(charInfo.Items[1]).Items.Length);
         Assert.Equal(4, Assert.IsType<PyTuple>(Value(dogmaState, "shipState")).Items.Length);
+        Assert.Empty(Assert.IsType<PyList>(await client.CallAsync(
+            service: null,
+            "GetTargets",
+            new PyTuple(),
+            dogmaLease)).Items);
+        Assert.Empty(Assert.IsType<PyList>(await client.CallAsync(
+            service: null,
+            "GetTargeters",
+            new PyTuple(),
+            dogmaLease)).Items);
 
         Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
             "crimewatch",
@@ -797,6 +810,133 @@ public class ConnectionIoTests
     }
 
     [Fact]
+    public async Task StationlessCharacterSelectionEntersExistingSolarSystem()
+    {
+        await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
+        CharacterSelectionResponse? selectionResponse =
+            await gateway.LoginBackend.GetCharacterSelectionAsync(
+                1,
+                ReadOnlyMemory<byte>.Empty,
+                CancellationToken.None);
+        Assert.NotNull(selectionResponse);
+        CharacterSummary spaceCharacter = Assert.Single(selectionResponse.Characters);
+        spaceCharacter.ClearStationId();
+        gateway.LoginBackend.CharacterSelectionFactory = () => selectionResponse;
+
+        using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
+        await client.CompleteHandshakeAsync();
+        PyList selection = Assert.IsType<PyList>(await client.CallAsync(
+            "charUnboundMgr",
+            "GetCharacterSelectionData",
+            new PyTuple()));
+        IReadOnlyDictionary<string, PyValue> character = AssertCharacterSelectionShape(selection);
+        long characterId = Integer(character, "characterID");
+        long solarSystemId = Integer(character, "solarSystemID");
+        Assert.IsType<PyNull>(character["stationID"]);
+
+        long selectCallId = await client.WriteCallAsync(
+            "charUnboundMgr",
+            "SelectCharacterID",
+            new PyTuple(new PyInteger(characterId), PyNull.Instance, new PyBoolean(false)));
+        MachoPacket selectionNotification = await client.ReadPacketAsync();
+        PyDictionary session = SessionChanges(selectionNotification);
+        Assert.IsType<PyNull>(Assert.IsType<PyTuple>(Value(session, "stationid")).Items[1]);
+        Assert.Equal(solarSystemId, CurrentSessionValue(selectionNotification, "locationid"));
+        Assert.Equal(solarSystemId, CurrentSessionValue(selectionNotification, "solarsystemid"));
+        Assert.IsType<PyNull>(await client.ReadCallResponseAsync(selectCallId));
+
+        Assert.Equal(3, Assert.IsType<PyTuple>(await client.CallAsync(
+            "jumpTimers",
+            "GetTimers",
+            new PyTuple(new PyInteger(characterId)))).Items.Length);
+        Assert.IsType<PyExtendedObject>(await client.CallAsync(
+            "securityMgr",
+            "get_modified_systems",
+            new PyTuple()));
+        PyTuple occupation = Assert.IsType<PyTuple>(await client.CallAsync(
+            "fwWarzoneSolarsystem",
+            "GetLocalOccupationState",
+            new PyTuple()));
+        Assert.Equal(solarSystemId, Assert.IsType<PyInteger>(occupation.Items[0]).Value);
+        Assert.IsType<PyNull>(occupation.Items[1]);
+        Assert.Equal(2, Assert.IsType<PyTuple>(await client.CallAsync(
+            service: null,
+            "GetSkillQueueAndFreePoints",
+            new PyTuple(),
+            "N=1:skills")).Items.Length);
+        Assert.Equal(5_000, Assert.IsType<PyFloat>(await client.CallAsync(
+            "account",
+            "GetCashBalance",
+            new PyTuple())).Value);
+
+        PyExtendedObject homeStation = Assert.IsType<PyExtendedObject>(await client.CallAsync(
+            "home_station",
+            "get_home_station",
+            new PyTuple()));
+        Assert.Equal(2, homeStation.Variant);
+        PyTuple homeStationHeader = Assert.IsType<PyTuple>(homeStation.Header);
+        Assert.Equal(
+            "homestation.types.StationData",
+            Assert.IsType<PyToken>(
+                Assert.IsType<PyTuple>(homeStationHeader.Items[0]).Items[0]).Value);
+        PyDictionary homeStationState = Assert.IsType<PyDictionary>(homeStationHeader.Items[1]);
+        Assert.Equal(
+            spaceCharacter.HeadquartersStationId,
+            Assert.IsType<PyInteger>(Value(homeStationState, "id")).Value);
+        Assert.Equal(
+            solarSystemId,
+            Assert.IsType<PyInteger>(Value(homeStationState, "solar_system_id")).Value);
+
+        var solarLocation = new PyTuple(new PyInteger(solarSystemId), new PyInteger(5));
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "dogmaIM",
+            "MachoResolveObject",
+            new PyTuple(solarLocation))).Value);
+        PyTuple dogma = Assert.IsType<PyTuple>(await client.CallAsync(
+            "dogmaIM",
+            "MachoBindObject",
+            new PyTuple(
+                solarLocation,
+                new PyTuple(
+                    new PyBuffer("GetAllInfo"u8),
+                    new PyTuple(new PyBoolean(true), new PyBoolean(true), PyNull.Instance),
+                    new PyDictionary()))));
+        string dogmaBinding = LeaseBinding(dogma.Items[0]);
+        PyDictionary dogmaState = Assert.IsType<PyDictionary>(
+            Assert.IsType<PyObject>(dogma.Items[1]).State);
+        PyTuple characterInfo = Assert.IsType<PyTuple>(Value(dogmaState, "charInfo"));
+        Assert.Equal(4, Assert.IsType<PyTuple>(characterInfo.Items[1]).Items.Length);
+        Assert.Empty(Assert.IsType<PyList>(await client.CallAsync(
+            service: null,
+            "GetTargets",
+            new PyTuple(),
+            dogmaBinding)).Items);
+        Assert.Empty(Assert.IsType<PyList>(await client.CallAsync(
+            service: null,
+            "GetTargeters",
+            new PyTuple(),
+            dogmaBinding)).Items);
+
+        Assert.Empty(Assert.IsType<PyTuple>(await client.CallCachedMethodAsync(
+            "beyonce",
+            "GetFormations",
+            new PyTuple(),
+            useStringTableServiceReference: true)).Items);
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "beyonce",
+            "MachoResolveObject",
+            new PyTuple(new PyInteger(solarSystemId)))).Value);
+        PyTuple solarLease = Assert.IsType<PyTuple>(await client.CallAsync(
+            "beyonce",
+            "MachoBindObject",
+            new PyTuple(new PyInteger(solarSystemId))));
+        AssertClientObjectBinding(LeaseBinding(solarLease.Items[0]));
+        Assert.IsType<PyNull>(solarLease.Items[1]);
+        AssertNotification(await client.ReadPacketAsync(), "DoDestinyUpdate");
+        Assert.Equal(1, gateway.SolarBackend.SubscribeCount);
+    }
+
+    [Fact]
     public async Task LoopbackCharacterCanSelectUndockAndDock()
     {
         await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1);
@@ -867,15 +1007,74 @@ public class ConnectionIoTests
         AssertSessionStation(await client.ReadPacketAsync(), expectedStationId: null);
         PyTuple shipLease = Assert.IsType<PyTuple>(
             await client.ReadCallResponseAsync(undockCallId));
-        Assert.StartsWith(
-            "N=ship:",
-            LeaseBinding(shipLease.Items[0]),
-            StringComparison.Ordinal);
+        AssertClientObjectBinding(LeaseBinding(shipLease.Items[0]));
         Assert.IsType<PyNull>(shipLease.Items[1]);
-        Assert.Empty(Assert.IsType<PyList>(await client.CallCachedMethodAsync(
+        Assert.Empty(Assert.IsType<PyTuple>(await client.CallCachedMethodAsync(
             "beyonce",
             "GetFormations",
-            new PyTuple())).Items);
+            new PyTuple(),
+            useStringTableServiceReference: true)).Items);
+
+        var solarLocation = new PyTuple(
+            new PyInteger(solarSystemId),
+            new PyInteger(5));
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "dogmaIM",
+            "MachoResolveObject",
+            new PyTuple(solarLocation))).Value);
+        PyTuple dogmaLease = Assert.IsType<PyTuple>(await client.CallAsync(
+            "dogmaIM",
+            "MachoBindObject",
+            new PyTuple(
+                solarLocation,
+                new PyTuple(
+                    new PyBuffer("GetAllInfo"u8),
+                    new PyTuple(new PyBoolean(true), new PyBoolean(true), PyNull.Instance),
+                    new PyDictionary()))));
+        AssertClientObjectBinding(LeaseBinding(dogmaLease.Items[0]));
+        Assert.IsType<PyObject>(dogmaLease.Items[1]);
+
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "crimewatch",
+            "MachoResolveObject",
+            new PyTuple(solarLocation))).Value);
+        PyTuple crimewatchLease = Assert.IsType<PyTuple>(await client.CallAsync(
+            "crimewatch",
+            "MachoBindObject",
+            new PyTuple(
+                solarLocation,
+                new PyTuple(
+                    new PyBuffer("GetClientStates"u8),
+                    new PyTuple(),
+                    new PyDictionary()))));
+        AssertClientObjectBinding(LeaseBinding(crimewatchLease.Items[0]));
+        Assert.Equal(4, Assert.IsType<PyTuple>(crimewatchLease.Items[1]).Items.Length);
+
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "invbroker",
+            "MachoResolveObject",
+            new PyTuple(solarLocation))).Value);
+        PyTuple inventoryLeases = Assert.IsType<PyTuple>(await client.CallAsync(
+            "invbroker",
+            "MachoBindObject",
+            new PyTuple(
+                solarLocation,
+                new PyTuple(
+                    new PyBuffer("GetInventoryFromId"u8),
+                    new PyTuple(new PyInteger(shipId), new PyBoolean(false)),
+                    new PyDictionary()))));
+        AssertClientObjectBinding(LeaseBinding(inventoryLeases.Items[0]));
+        string shipInventoryBinding = LeaseBinding(inventoryLeases.Items[1]);
+        AssertClientObjectBinding(shipInventoryBinding);
+        IReadOnlyDictionary<string, PyValue> spaceShip = PackedRowTestReader.Read(
+            Assert.IsType<PyPackedRow>(await client.CallAsync(
+                service: null,
+                "GetSelfInvItem",
+                new PyTuple(),
+                shipInventoryBinding)));
+        Assert.Equal(solarSystemId, Integer(spaceShip, "locationID"));
+        Assert.Equal(0, Integer(spaceShip, "flagID"));
+
         Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
             "beyonce",
             "MachoResolveObject",
@@ -886,7 +1085,7 @@ public class ConnectionIoTests
             "MachoBindObject",
             new PyTuple(new PyInteger(solarSystemId))));
         string solarBinding = LeaseBinding(solarLease.Items[0]);
-        Assert.StartsWith("N=solarsystem:", solarBinding, StringComparison.Ordinal);
+        AssertClientObjectBinding(solarBinding);
         Assert.IsType<PyNull>(solarLease.Items[1]);
         AssertNotification(await client.ReadPacketAsync(), "DoDestinyUpdate");
         Assert.IsType<PyNull>(await client.CallAsync(
@@ -1110,6 +1309,16 @@ public class ConnectionIoTests
             ProtocolProfileCatalog.GetRequired(3_396_210));
         Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
         return Text(Assert.IsType<PyTuple>(decoded.Value).Items[0]);
+    }
+
+    private static void AssertClientObjectBinding(string binding)
+    {
+        string[] parts = binding.Split(':');
+        Assert.Equal(2, parts.Length);
+        Assert.StartsWith("N=", parts[0], StringComparison.Ordinal);
+        Assert.True(long.TryParse(parts[0].AsSpan(2), out long nodeId));
+        Assert.True(nodeId > 0);
+        Assert.NotEmpty(parts[1]);
     }
 
     private static long CurrentSessionValue(MachoPacket packet, string key)

@@ -9,7 +9,7 @@ internal sealed partial class GatewayClientConnection
     private string? shipAccessBinding;
 
     private RpcDispatchResult ResolveShipAccess(MachoRpcRequest request)
-        => HasDockedInventoryObject(request.Arguments)
+        => HasSelectedLocationObject(request.Arguments)
             ? Result(new PyInteger(ProxyNodeId))
             : Result(PyNull.Instance);
 
@@ -18,7 +18,7 @@ internal sealed partial class GatewayClientConnection
         CancellationToken cancellationToken)
     {
         if (request.Arguments.Items.Length != 2
-            || !HasDockedInventoryObject(new PyTuple(request.Arguments.Items[0]))
+            || !HasSelectedLocationObject(new PyTuple(request.Arguments.Items[0]))
             || Unwrap(request.Arguments.Items[1]) is not PyTuple { Items.Length: 3 } nested)
         {
             return Result(PyNull.Instance);

@@ -47,6 +47,7 @@ internal sealed partial class GatewayClientConnection(
     private CharacterSummary? selectedCharacter;
     private CharacterSelectionResponse? characterSelection;
     private string? solarSystemBinding;
+    private ulong? solarSystemBindingEpoch;
     private CancellationTokenSource? connectionLifetime;
     private CancellationTokenSource? solarSubscriptionCancellation;
     private Task? solarSubscriptionTask;

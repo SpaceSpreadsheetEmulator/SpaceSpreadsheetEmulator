@@ -24,24 +24,28 @@ internal static class Build3396210InventoryMapper
     public static PyPackedRow CreateActiveShip(CharacterSummary character)
     {
         ArgumentNullException.ThrowIfNull(character);
-        if (!character.HasStationId
-            || character.CharacterId is <= 0 or > int.MaxValue
+        if (character.CharacterId is <= 0 or > int.MaxValue
             || character.ShipId <= 0
             || character.ShipTypeId <= 0
             || character.ShipGroupId <= 0
-            || character.ShipCategoryId <= 0)
+            || character.ShipCategoryId <= 0
+            || character.SolarSystemId <= 0)
         {
-            throw new ArgumentException("The selected character has no valid docked active ship.", nameof(character));
+            throw new ArgumentException("The selected character has no valid active ship.", nameof(character));
         }
 
+        long locationId = character.HasStationId
+            ? character.StationId
+            : character.SolarSystemId;
+        int flagId = character.HasStationId ? 4 : 0;
         return Build3396210PackedRowBuilder.CreateRow(
             ItemFields,
             [
                 new PyInteger(character.ShipId),
                 new PyInteger(character.ShipTypeId),
                 new PyInteger(character.CharacterId),
-                new PyInteger(character.StationId),
-                new PyInteger(4),
+                new PyInteger(locationId),
+                new PyInteger(flagId),
                 new PyInteger(-1),
                 new PyInteger(character.ShipGroupId),
                 new PyInteger(character.ShipCategoryId),

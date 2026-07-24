@@ -13,6 +13,15 @@ character selection, session state, routing, and gameplay mutations are always
 authored from current server state. Disallowed manifest entries are ignored before
 their payload files are opened.
 
+The graphical build-3396210 checkpoint currently requires that private replay
+bundle. The transport and Blue-marshal values are decoded, validated, and emitted in
+fresh correlated response packets, but the complete semantics of every replayed
+auxiliary result are not yet understood well enough to replace them with authored
+fallbacks. With replay disabled, authentication and the character-selection rowset
+succeed, but startup stops at the population-cap bootstrap before the client sends
+`SelectCharacterID`. Therefore a source-only checkout without the local replay
+material is not yet a graphical-client-compatible server.
+
 Private capture validation is intentionally local-only. Put parser-generated
 `frames*.jsonl` exports below `_local/protocol-captures/`, or set
 `ProtocolTests:LocalCaptureDirectory` in the ignored

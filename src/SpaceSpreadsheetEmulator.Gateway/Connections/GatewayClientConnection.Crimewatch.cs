@@ -10,14 +10,14 @@ internal sealed partial class GatewayClientConnection
     private string? corporationRegistryBinding;
 
     private RpcDispatchResult ResolveCrimewatchLocation(MachoRpcRequest request)
-        => HasDockedInventoryObject(request.Arguments)
+        => HasSelectedLocationObject(request.Arguments)
             ? Result(new PyInteger(ProxyNodeId))
             : Result(PyNull.Instance);
 
     private RpcDispatchResult BindCrimewatchLocation(MachoRpcRequest request)
     {
         if (request.Arguments.Items.Length != 2
-            || !HasDockedInventoryObject(new PyTuple(request.Arguments.Items[0]))
+            || !HasSelectedLocationObject(new PyTuple(request.Arguments.Items[0]))
             || Unwrap(request.Arguments.Items[1]) is not PyTuple { Items.Length: 3 } nested
             || Unwrap(nested.Items[1]) is not PyTuple { Items.Length: 0 }
             || Unwrap(nested.Items[2]) is not PyDictionary { Entries.Length: 0 })

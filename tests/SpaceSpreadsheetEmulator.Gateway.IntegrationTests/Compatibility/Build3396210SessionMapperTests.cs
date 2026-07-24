@@ -93,6 +93,7 @@ public sealed class Build3396210SessionMapperTests
         PyDictionary changes = Changes(packet);
         Assert.IsType<PyNull>(Current(changes, "stationid"));
         Assert.Equal(30_002_780, Integer(changes, "locationid"));
+        Assert.Equal(30_002_780, Integer(changes, "solarsystemid"));
         Assert.Equal(30_002_780, Integer(changes, "solarsystemid2"));
     }
 

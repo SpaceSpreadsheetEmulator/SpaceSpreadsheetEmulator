@@ -152,6 +152,8 @@ internal sealed partial class GatewayClientConnection
             "charUnboundMgr.SelectCharacterID" => SelectCharacter(request),
             "stationSvc.GetStationItemBits" => GetStationItemBits(request),
             "map.GetStationInfo" => await GetStationInfoAsync(request, cancellationToken),
+            "home_station.get_home_station" => await GetHomeStationAsync(request, cancellationToken),
+            "account.GetCashBalance" => GetCashBalance(request),
             "dogmaIM.MachoResolveObject" => ResolveDogmaLocation(request),
             "dogmaIM.MachoBindObject" => BindDogmaLocation(request),
             "invbroker.MachoResolveObject" => ResolveInventoryBroker(request),
@@ -173,6 +175,8 @@ internal sealed partial class GatewayClientConnection
             "bound.GetSelfInvItem" => GetSelfInventoryItem(request),
             "bound.List" => ListInventory(request),
             "bound.GetAvailableTurretSlots" => GetAvailableTurretSlots(request),
+            "bound.GetTargets" => GetDogmaTargetCollection(request),
+            "bound.GetTargeters" => GetDogmaTargetCollection(request),
             "bound.GetBoosters" => GetSkillBoosters(request),
             "bound.GetAggressionSettings" => GetCorporationAggressionSettings(request),
             "bound.GetEveOwners" => GetCorporationMembers(request),
@@ -190,10 +194,10 @@ internal sealed partial class GatewayClientConnection
             return dynamicResponse;
         }
 
-        RpcDispatchResult? stationBootstrap = GetStationBootstrapResponse(route, request);
-        if (stationBootstrap is not null)
+        RpcDispatchResult? characterBootstrap = GetCharacterBootstrapResponse(route, request);
+        if (characterBootstrap is not null)
         {
-            return stationBootstrap;
+            return characterBootstrap;
         }
 
         StartupResponse? startupResponse = Build3396210StartupProfile.CreateResponse(
@@ -243,6 +247,7 @@ internal sealed partial class GatewayClientConnection
         characterManagerBinding = null;
         methodCache.Clear();
         crimewatchBinding = null;
+        dogmaBinding = null;
         corporationRegistryBinding = null;
         skillHandlerBinding = null;
         shipAccessBinding = null;
@@ -301,6 +306,33 @@ internal sealed partial class GatewayClientConnection
             ? Result(PyNull.Instance)
             : CacheMethodResult("map", "GetStationInfo", stationInfo);
     }
+
+    private async Task<RpcDispatchResult> GetHomeStationAsync(
+        MachoRpcRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Arguments.Items.Length != 0
+            || selectedCharacter is not { HeadquartersStationId: > 0 } character)
+        {
+            return Result(PyNull.Instance);
+        }
+
+        StationCatalogResponse? catalog = await loginBackend.GetStationCatalogAsync(
+            gatewaySessionId,
+            loginSession!.LoginTicket,
+            cancellationToken);
+        StationSummary? homeStation = catalog?.Stations.SingleOrDefault(
+            station => station.StationId == character.HeadquartersStationId);
+        return homeStation is null
+            ? Result(PyNull.Instance)
+            : Result(Build3396210StationBootstrapMapper.CreateHomeStation(homeStation));
+    }
+
+    private RpcDispatchResult GetCashBalance(MachoRpcRequest request)
+        => request.Arguments.Items.Length == 0
+            && selectedCharacter is { } character
+                ? Result(Build3396210StationBootstrapMapper.CreateCashBalance(character))
+                : Result(PyNull.Instance);
 
     private MachoPacket CreateInitialSessionNotification(long clientId)
     {
@@ -483,10 +515,11 @@ internal sealed partial class GatewayClientConnection
     private static partial void LogInvalidCharacterSelection(ILogger logger);
 
     private static string? ReadText(PyValue value)
-        => value switch
+        => Unwrap(value) switch
         {
             PyText text => text.Value,
             PyToken token => token.Value,
+            PyStringTableReference tableReference => tableReference.Value,
             PyBuffer buffer => Encoding.UTF8.GetString(buffer.Value.AsSpan()),
             _ => null,
         };

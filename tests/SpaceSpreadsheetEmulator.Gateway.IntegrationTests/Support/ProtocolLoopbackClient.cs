@@ -63,7 +63,8 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
     public async Task<PyValue> CallCachedMethodAsync(
         string service,
         string method,
-        PyTuple arguments)
+        PyTuple arguments,
+        bool useStringTableServiceReference = false)
     {
         PyObject methodResult = Assert.IsType<PyObject>(await CallAsync(service, method, arguments));
         PyTuple methodState = Assert.IsType<PyTuple>(methodResult.State);
@@ -72,11 +73,14 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
         PyValue key = referenceState.Items[0];
         PyValue nodeId = referenceState.Items[1];
         PyValue version = referenceState.Items[2];
+        PyValue requestKey = useStringTableServiceReference
+            ? WithStringTableServiceReference(key, service)
+            : key;
 
         PyObject cachedObject = Assert.IsType<PyObject>(await CallAsync(
             "objectCaching",
             "GetCachableObject",
-            new PyTuple(new PyInteger(1), key, version, nodeId)));
+            new PyTuple(new PyInteger(1), requestKey, version, nodeId)));
         PyTuple cachedState = Assert.IsType<PyTuple>(cachedObject.State);
         Assert.Equal(7, cachedState.Items.Length);
         Assert.IsType<PyNull>(cachedState.Items[1]);
@@ -93,6 +97,20 @@ internal sealed class ProtocolLoopbackClient(TcpClient client) : IDisposable
             Profile);
         Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
         return decoded.Value!;
+    }
+
+    private static PyTuple WithStringTableServiceReference(PyValue keyValue, string service)
+    {
+        PyTuple key = Assert.IsType<PyTuple>(keyValue);
+        PyTuple method = Assert.IsType<PyTuple>(key.Items[2]);
+        int stringTableIndex = Profile.StringTable.IndexOf(service);
+        Assert.True(stringTableIndex > 0);
+        return new PyTuple(
+            key.Items[0],
+            key.Items[1],
+            new PyTuple(
+                new PyStringTableReference(stringTableIndex, service),
+                method.Items[1]));
     }
 
     public async Task<long> WriteCallAsync(

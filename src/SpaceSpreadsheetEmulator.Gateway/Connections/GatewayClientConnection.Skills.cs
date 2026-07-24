@@ -22,7 +22,7 @@ internal sealed partial class GatewayClientConnection
             || !TryInteger(request.Arguments.Items[0], out long characterId)
             || characterId != selectedCharacter.CharacterId
             || Unwrap(request.Arguments.Items[1]) is not PyTuple { Items.Length: 3 } nested
-            || !string.Equals(ReadText(nested.Items[0]), "GetBoosters", StringComparison.Ordinal)
+            || ReadText(nested.Items[0]) is not ("GetSkills" or "GetBoosters")
             || Unwrap(nested.Items[1]) is not PyTuple { Items.Length: 0 }
             || Unwrap(nested.Items[2]) is not PyDictionary { Entries.Length: 0 })
         {

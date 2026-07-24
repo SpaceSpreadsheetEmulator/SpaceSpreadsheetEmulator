@@ -28,25 +28,36 @@ internal static class Build3396210SessionMapper
         long locationId = character.HasStationId
             ? character.StationId
             : character.SolarSystemId;
+        var changes = new List<(string Key, PyValue Value)>
+        {
+            ("genderID", Change(new PyBoolean(false))),
+            ("bloodlineID", Change(new PyInteger(character.BloodlineId))),
+            ("raceID", Change(new PyInteger(character.RaceId))),
+            ("corpid", Change(new PyInteger(character.CorporationId))),
+            ("regionid", Change(new PyInteger(character.RegionId))),
+            ("stationid", Change(stationId)),
+            ("locationid", Change(new PyInteger(locationId))),
+        };
+        if (!character.HasStationId)
+        {
+            changes.Add(("solarsystemid", Change(new PyInteger(character.SolarSystemId))));
+        }
+
+        changes.AddRange(
+        [
+            ("hqID", Change(new PyInteger(character.HeadquartersStationId))),
+            ("solarsystemid2", Change(new PyInteger(character.SolarSystemId))),
+            ("shipid", Change(new PyInteger(character.ShipId))),
+            ("charid", Change(new PyInteger(character.CharacterId))),
+            ("constellationid", Change(new PyInteger(character.ConstellationId))),
+        ]);
 
         return Create(
             gatewaySessionId,
             proxyNodeId,
             clientId,
             userId,
-            Dictionary(
-                ("genderID", Change(new PyBoolean(false))),
-                ("bloodlineID", Change(new PyInteger(character.BloodlineId))),
-                ("raceID", Change(new PyInteger(character.RaceId))),
-                ("corpid", Change(new PyInteger(character.CorporationId))),
-                ("regionid", Change(new PyInteger(character.RegionId))),
-                ("stationid", Change(stationId)),
-                ("locationid", Change(new PyInteger(locationId))),
-                ("hqID", Change(new PyInteger(character.HeadquartersStationId))),
-                ("solarsystemid2", Change(new PyInteger(character.SolarSystemId))),
-                ("shipid", Change(new PyInteger(character.ShipId))),
-                ("charid", Change(new PyInteger(character.CharacterId))),
-                ("constellationid", Change(new PyInteger(character.ConstellationId)))),
+            Dictionary([.. changes]),
             requestExtensions);
     }
 

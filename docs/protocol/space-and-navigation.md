@@ -52,7 +52,7 @@ The session change causes the client to initialize its space services:
 
 ```text
 client -> beyonce.GetFormations()
-server -> cached or direct build-appropriate formations result
+server -> cached build-appropriate formations tuple
 
 client -> beyonce.MachoResolveObject(solarSystemID)
 server -> owning node
@@ -94,6 +94,40 @@ a successful undock.
 The backend transition, binding, snapshot-first stream, and current Destiny
 mapping are **Server-covered**. The full graphical build-3396210 undock remains
 **Open**.
+
+### Build-3396210 bootstrap compatibility constraints
+
+The inspected client parses a bound-object identifier as exactly two
+colon-separated fields:
+
+```text
+N=<numeric node ID>:<opaque object ID>
+```
+
+Partition identity and fencing epochs are server state and must not be appended as
+additional colon-separated fields. Gateway keeps the solar-system epoch beside the
+opaque lease and validates it before accepting bound movement or docking calls.
+
+After the station-to-space session change, location-scoped `ship`, `dogmaIM`,
+`invbroker`, and `crimewatch` monikers use `(solarSystemID, 5)` rather than the
+station scope `(stationID, 15)`. Their old station leases are invalidated by the
+transition. The `beyonce.GetFormations` cache key may encode the service through
+the build string table, so cache routing compares decoded text semantics rather
+than requiring one concrete marshal string representation.
+
+Character-scoped bootstrap calls are still valid when the selected character is
+already in space. They must not be guarded by the presence of `stationid`. In
+particular, the inspected build requires typed results for jump timers, modified
+security systems, local factional-warfare occupation, the skill queue, wallet
+balance, and home-station metadata before it proceeds to the ballpark request.
+The empty/default portions remain explicitly non-authoritative compatibility
+values; home-station and wallet fields are mapped from Worker-owned state and the
+build-pinned station catalog.
+
+These constraints are covered by the Gateway loopback and standalone-topology
+tests. They remove known pre-snapshot bootstrap failures; a graphical client
+checkpoint is still required before the complete inflight state can be called
+wire-proven.
 
 ### Playable environment after inflight bootstrap
 

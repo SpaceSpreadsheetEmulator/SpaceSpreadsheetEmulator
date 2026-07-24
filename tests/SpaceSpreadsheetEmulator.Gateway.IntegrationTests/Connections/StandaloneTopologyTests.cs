@@ -387,7 +387,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         AssertStation(await client.ReadPacketAsync(), expectedStationId: null);
         PyTuple lease = Assert.IsType<PyTuple>(
             await client.ReadCallResponseAsync(callId));
-        Assert.StartsWith("N=ship:", LeaseBinding(lease.Items[0]), StringComparison.Ordinal);
+        AssertClientObjectBinding(LeaseBinding(lease.Items[0]));
         Assert.IsType<PyNull>(lease.Items[1]);
     }
 
@@ -400,7 +400,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             "MachoBindObject",
             new PyTuple(new PyInteger(solarSystemId))));
         string binding = LeaseBinding(lease.Items[0]);
-        Assert.StartsWith("N=solarsystem:", binding, StringComparison.Ordinal);
+        AssertClientObjectBinding(binding);
         Assert.IsType<PyNull>(lease.Items[1]);
         AssertNotification(await client.ReadPacketAsync(), "DoDestinyUpdate");
         return binding;
@@ -435,6 +435,16 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         PyBuffer binding = Assert.IsType<PyBuffer>(
             Assert.IsType<PyTuple>(decoded.Value).Items[0]);
         return System.Text.Encoding.UTF8.GetString(binding.Value.AsSpan());
+    }
+
+    private static void AssertClientObjectBinding(string binding)
+    {
+        string[] parts = binding.Split(':');
+        Assert.Equal(2, parts.Length);
+        Assert.StartsWith("N=", parts[0], StringComparison.Ordinal);
+        Assert.True(long.TryParse(parts[0].AsSpan(2), out long nodeId));
+        Assert.True(nodeId > 0);
+        Assert.NotEmpty(parts[1]);
     }
 
     private static void AssertNotification(MachoPacket packet, string scope)

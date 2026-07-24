@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
@@ -8,7 +9,7 @@ using SpaceSpreadsheetEmulator.Protocol.Values;
 namespace SpaceSpreadsheetEmulator.Gateway.Compatibility;
 
 /// <summary>
-/// Creates the non-authoritative empty/default contracts observed during station entry.
+/// Creates the non-authoritative empty/default contracts observed after character selection.
 /// </summary>
 internal static class Build3396210StationBootstrapMapper
 {
@@ -48,6 +49,23 @@ internal static class Build3396210StationBootstrapMapper
 
     public static PyTuple CreateEmptyJumpTimers()
         => new(PyNull.Instance, PyNull.Instance, PyNull.Instance);
+
+    public static PyExtendedObject CreateHomeStation(StationSummary station)
+        => new(
+            2,
+            new PyTuple(
+                new PyTuple(new PyToken("homestation.types.StationData")),
+                new PyDictionary(
+                    Entry("is_fallback", new PyBoolean(false)),
+                    Entry("solar_system_id", new PyInteger(station.SolarSystemId)),
+                    Entry("id", new PyInteger(station.StationId)),
+                    Entry("type_id", new PyInteger(station.StationTypeId)))));
+
+    public static PyFloat CreateCashBalance(CharacterSummary character)
+        => new((double)decimal.Parse(
+            character.Balance,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture));
 
     public static PyTuple CreateEmptyBookmarkState()
     {

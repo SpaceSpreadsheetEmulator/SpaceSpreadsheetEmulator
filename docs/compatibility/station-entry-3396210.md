@@ -322,6 +322,24 @@ unsupported ship contents, but the station hangar inventory must contain the
 authoritative active-ship row when no flag filter or the hangar flag is
 requested.
 
+## Skill-handler bind boundary
+
+The exact build starts its skill handler during the synchronous station session
+change. Its first `skillMgr2.MachoBindObject` request carries a nested
+zero-argument `GetSkills` call. A different observed path can initiate the same
+moniker with `GetBoosters`, so both names are valid initial bind methods and return:
+
+```text
+(skillHandlerLease, empty skills-or-boosters dictionary)
+```
+
+Accepting only `GetBoosters` makes the real `GetSkills` bind return null. The client
+then raises while iterating its skills, which prevents both hangar model selection
+and the undock preflight from reaching their respective server calls. This is not an
+inventory failure: the durable active-ship row and station inventory lease have
+already been accepted. Gateway accepts only these two observed zero-argument bind
+methods and still fails closed for other nested calls or malformed arguments.
+
 ## Crimewatch session-change boundary
 
 Returning the active ship is necessary but does not complete the synchronous

@@ -43,11 +43,10 @@ internal sealed partial class GatewayClientConnection
 
         int previousStationId = selectedCharacter.StationId;
         ApplyTransition(transition);
-        solarSystemBinding = $"N=solarsystem:{transition.SolarSystemId}:{transition.Epoch}";
-        string shipBinding = $"N=ship:{transition.ShipId}:{transition.Epoch}";
+        shipAccessBinding = CreateShipAccessBinding(request.CallId);
         long clientId = checked(1_000_000L + loginSession.AccountId);
         return Result(
-            new PyTuple(CreateLease(shipBinding), PyNull.Instance),
+            new PyTuple(CreateLease(shipAccessBinding), PyNull.Instance),
             beforeResponse:
             [
                 Build3396210SessionMapper.CreateUndock(
@@ -63,7 +62,7 @@ internal sealed partial class GatewayClientConnection
 
     private RpcDispatchResult GetSolarSystemFormations(MachoRpcRequest request)
         => request.Arguments.Items.Length == 0
-            ? CacheMethodResult("beyonce", "GetFormations", new PyList())
+            ? CacheMethodResult("beyonce", "GetFormations", new PyTuple())
             : Result(PyNull.Instance);
 
     private RpcDispatchResult ResolveSolarSystem(MachoRpcRequest request)
@@ -97,7 +96,8 @@ internal sealed partial class GatewayClientConnection
                 return Result(PyNull.Instance);
             }
 
-            solarSystemBinding = $"N=solarsystem:{route.SolarSystemId}:{route.Epoch}";
+            solarSystemBinding = CreateSolarSystemBinding(request.CallId);
+            solarSystemBindingEpoch = route.Epoch;
         }
 
         if (solarSystemBinding is null)
@@ -109,7 +109,7 @@ internal sealed partial class GatewayClientConnection
             selectedCharacter.SolarSystemId,
             cancellationToken);
         if (route is null
-            || !solarSystemBinding.EndsWith($":{route.Epoch}", StringComparison.Ordinal))
+            || solarSystemBindingEpoch != route.Epoch)
         {
             return Result(PyNull.Instance);
         }
@@ -277,6 +277,7 @@ internal sealed partial class GatewayClientConnection
         long clientId = checked(1_000_000L + loginSession.AccountId);
         ApplyTransition(transition);
         solarSystemBinding = null;
+        solarSystemBindingEpoch = null;
         await StopSolarSystemSubscriptionAsync(cancel: true);
         return Result(
             PyNull.Instance,
@@ -324,5 +325,15 @@ internal sealed partial class GatewayClientConnection
         }
 
         selectedCharacter = updated;
+        solarSystemBinding = null;
+        solarSystemBindingEpoch = null;
+        shipAccessBinding = null;
+        inventoryBrokerBinding = null;
+        inventoryBindings.Clear();
+        crimewatchBinding = null;
+        dogmaBinding = null;
     }
+
+    private static string CreateSolarSystemBinding(long callId)
+        => $"N={ProxyNodeId}:{checked((callId * 2) + 80_000)}";
 }

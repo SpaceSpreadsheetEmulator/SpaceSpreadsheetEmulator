@@ -151,9 +151,25 @@ solar-system and ship without inventing a station. The client is expected to
 resolve and bind the solar-system remote object and receive a fresh initial
 ballpark snapshot.
 
-This path is **Server-covered** by topology tests. Its graphical build-3396210
-ordering is still **Open** and needs an exact-build reconnect capture. Do not
-assume the docked bootstrap or a previously issued lease remains valid.
+The initial character session must set all of the active location attributes
+consistently:
+
+```text
+stationid      = null
+locationid     = solarSystemID
+solarsystemid  = solarSystemID
+solarsystemid2 = solarSystemID
+shipid         = activeShipID
+```
+
+`solarsystemid2` alone identifies the map hierarchy but does not establish an
+active space location. Without `solarsystemid`, build 3396210 rejects dependent
+location monikers before it requests the solar-system ballpark.
+
+This path is **Server-covered** by the encoded Gateway loopback and topology
+tests. Its graphical build-3396210 completion is still **Open** until a reconnect
+reaches and accepts the fresh Destiny snapshot. Do not assume the docked bootstrap
+or a previously issued lease remains valid.
 
 ## Failure boundaries
 

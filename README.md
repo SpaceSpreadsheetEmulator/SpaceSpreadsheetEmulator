@@ -15,9 +15,13 @@ immutable SDE artifact, authenticates a development account through Worker gRPC,
 creates a deterministic starter character, and authors the build-specific packed
 character-selection rowsets and dependent owner records from current Worker state.
 Captured startup replay is limited to explicitly allowlisted auxiliary bootstrap
-queries. A fresh graphical build-3396210 run accepts the authored selection and sends
-`SelectCharacterID`; the first post-selection session transition is the Milestone 3
-boundary. Gateway TCP and development enrollment remain disabled by default.
+queries. The independently authored fallbacks do not yet model enough of those
+queries for the graphical build-3396210 client to complete startup: without the
+private replay bundle, it currently stops before `SelectCharacterID`. With replay
+enabled, a fresh graphical run accepts the authored selection and enters the station.
+This replay dependency is a known compatibility gap, not evidence that the auxiliary
+results are understood or suitable as authored production behavior. Gateway TCP and
+development enrollment remain disabled by default.
 
 The current gameplay checkpoint also supports one or more configured solar-system
 partitions under a Worker owner. Coordinator publishes the bootstrap assignments,

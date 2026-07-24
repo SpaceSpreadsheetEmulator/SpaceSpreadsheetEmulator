@@ -75,6 +75,19 @@ The current repository supplies only the focused station/bootstrap Dogma values
 already covered by its compatibility tests. Fitted-item effect evaluation is not
 implemented.
 
+For build 3396210, the character-brain portion of `charInfo` is a four-item
+tuple:
+
+```text
+(brainVersion, characterEffects, shipEffects, auxiliaryEffects)
+```
+
+The three effect collections can be empty for the starter state, but none can be
+omitted. A shortened tuple fails character embarkation before the client
+requests its solar-system ballpark. After binding, the client also refreshes the
+bound Dogma location's target and targeter collections; a character with neither
+receives empty lists rather than `null`.
+
 ## Ship-access bootstrap
 
 The target-build station catalog leads to a ship-access resolve/bind with nested

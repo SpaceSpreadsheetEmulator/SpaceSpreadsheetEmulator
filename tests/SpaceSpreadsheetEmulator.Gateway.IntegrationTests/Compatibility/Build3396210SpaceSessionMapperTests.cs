@@ -92,7 +92,7 @@ public sealed class Build3396210SpaceSessionMapperTests
             Build3396210SpaceSessionMapper.CreateObjectDisconnect(
                 1,
                 7,
-                "N=solarsystem:30000142:7",
+                "N=1:80200",
                 1_000_007);
         MachoPacket finished =
             Build3396210SpaceSessionMapper.CreateDockingFinished(1, 7, 60_000_004);
@@ -104,7 +104,7 @@ public sealed class Build3396210SpaceSessionMapperTests
             Assert.Single(Arguments(accepted).Items)).Value);
         Assert.Collection(
             Arguments(disconnected).Items,
-            value => Assert.Equal("N=solarsystem:30000142:7", Text(value)),
+            value => Assert.Equal("N=1:80200", Text(value)),
             value => Assert.Equal(1_000_007, Assert.IsType<PyInteger>(value).Value),
             value => Assert.IsType<PyNull>(value));
     }
