@@ -74,10 +74,20 @@ unary callback RPC per notification.
 Every streamed envelope carries enough neutral routing and fencing information for
 Gateway to deliver safely: gateway and gateway-session identity, solar-system ID,
 producing Worker identity, ownership epoch, and a monotonically ordered sequence or
-cursor. Gateway drops stale-epoch output. Streams and their buffers are bounded,
-cancellation-aware, observable, and fail closed on gaps that cannot be recovered.
+cursor. Gateway drops stale-epoch output. The current implementation requires a
+snapshot first and then an exactly contiguous sequence; a route, epoch, session, or
+sequence mismatch fails the client connection closed. Streams and their buffers are
+bounded, cancellation-aware, observable, and fail closed on gaps that cannot be recovered.
 The protocol adapter maps snapshots/events into the ordering and packet shapes
 required by the selected client build.
+
+The stream is an in-space presentation subscription, not the authenticated client
+session and not Worker ownership of the character. Gateway starts it only after the
+solar-system bind response has entered the ordered outbound queue, so the client
+cannot receive simulation state before it has a ballpark binding. Docking cancels
+that in-space stream and releases the solar-system bound object. The TCP login
+session remains open, and the docked character and ship remain authoritative state
+owned by the same Worker solar-system partition.
 
 Internal runtime methods may query or replace state for deterministic tests,
 snapshot restore, reconciliation, and administration. They are not automatically
@@ -111,3 +121,10 @@ generic rules, common, helpers, or service-registry assembly.
 - The early-stage migration removed `SetVelocity` and `GetShipState` from the
   Gateway-facing contract. `backplane.v2` now exposes intent commands and
   `SubscribeSession`; runtime inspection remains outside the gRPC surface.
+- Gateway now maps build-3396210 solar resolve/bind, initial `SetState`, movement
+  deltas, and dock teardown without exposing `PyValue`, MachoNet packets, Destiny
+  bytes, or bound-object identifiers to Worker.
+- One connection-level sequencer atomically queues response/notification batches
+  from RPC and stream producers. Undock location change precedes the ship bind
+  response; dock response precedes acceptance, final simulation cleanup, object
+  release, station location change, and docking completion.

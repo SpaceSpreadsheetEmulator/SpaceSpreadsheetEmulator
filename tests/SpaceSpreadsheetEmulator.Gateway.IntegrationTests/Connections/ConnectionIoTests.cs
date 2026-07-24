@@ -835,27 +835,57 @@ public class ConnectionIoTests
             new PyBuffer("Undock"u8),
             new PyTuple(new PyInteger(shipId), new PyBoolean(false)),
             new PyDictionary(new PyDictionaryEntry(new PyText("onlineModules"), new PyDictionary())));
-        PyText shipBinding = Assert.IsType<PyText>(await client.CallAsync(
+        long undockCallId = await client.WriteCallAsync(
             "ship",
             "MachoBindObject",
             new PyTuple(
                 new PyTuple(new PyInteger(stationId), new PyInteger(15)),
-                nestedUndock)));
-        Assert.StartsWith("N=ship:", shipBinding.Value, StringComparison.Ordinal);
+                nestedUndock));
         AssertSessionStation(await client.ReadPacketAsync(), expectedStationId: null);
+        PyTuple shipLease = Assert.IsType<PyTuple>(
+            await client.ReadCallResponseAsync(undockCallId));
+        Assert.StartsWith(
+            "N=ship:",
+            LeaseBinding(shipLease.Items[0]),
+            StringComparison.Ordinal);
+        Assert.IsType<PyNull>(shipLease.Items[1]);
+        Assert.Empty(Assert.IsType<PyList>(await client.CallCachedMethodAsync(
+            "beyonce",
+            "GetFormations",
+            new PyTuple())).Items);
+        Assert.Equal(1, Assert.IsType<PyInteger>(await client.CallAsync(
+            "beyonce",
+            "MachoResolveObject",
+            new PyTuple(new PyInteger(solarSystemId)))).Value);
 
-        PyText solarBinding = Assert.IsType<PyText>(await client.CallAsync(
+        PyTuple solarLease = Assert.IsType<PyTuple>(await client.CallAsync(
             "beyonce",
             "MachoBindObject",
             new PyTuple(new PyInteger(solarSystemId))));
-        Assert.StartsWith("N=solarsystem:", solarBinding.Value, StringComparison.Ordinal);
+        string solarBinding = LeaseBinding(solarLease.Items[0]);
+        Assert.StartsWith("N=solarsystem:", solarBinding, StringComparison.Ordinal);
+        Assert.IsType<PyNull>(solarLease.Items[1]);
+        AssertNotification(await client.ReadPacketAsync(), "DoDestinyUpdate");
+        Assert.IsType<PyNull>(await client.CallAsync(
+            service: null,
+            "CmdGotoDirection",
+            new PyTuple(
+                new PyFloat(1),
+                new PyFloat(0),
+                new PyFloat(0)),
+            solarBinding));
+        Assert.Equal(1, gateway.SolarBackend.MovementIntentCount);
 
         Assert.IsType<PyNull>(await client.CallAsync(
             service: null,
             "CmdDock",
             new PyTuple(new PyInteger(stationId), new PyInteger(shipId)),
-            solarBinding.Value));
+            solarBinding));
+        AssertNotification(await client.ReadPacketAsync(), "OnDockingAccepted");
+        AssertNotification(await client.ReadPacketAsync(), "DoDestinyUpdate");
+        AssertNotification(await client.ReadPacketAsync(), "OnMachoObjectDisconnect");
         AssertSessionStation(await client.ReadPacketAsync(), stationId);
+        AssertNotification(await client.ReadPacketAsync(), "OnDockingFinished");
         Assert.Equal(1, gateway.SolarBackend.UndockCount);
         Assert.Equal(1, gateway.SolarBackend.DockCount);
         Assert.Equal(1, gateway.SolarBackend.SubscribeCount);
@@ -1027,8 +1057,14 @@ public class ConnectionIoTests
 
     private static void AssertSessionStation(MachoPacket packet, long? expectedStationId)
     {
+        Assert.Equal(16, packet.NumericType);
+        AssertStationChange(SessionChanges(packet), expectedStationId);
+    }
+
+    private static void AssertNotification(MachoPacket packet, string scope)
+    {
         Assert.Equal(12, packet.NumericType);
-        AssertStationChange(Assert.IsType<PyDictionary>(packet.Payload), expectedStationId);
+        Assert.Equal(scope, Assert.IsType<MachoBroadcastAddress>(packet.Destination).Scope);
     }
 
     private static void AssertStationChange(PyDictionary session, long? expectedStationId)

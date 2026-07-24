@@ -48,14 +48,14 @@ internal sealed class Build3396210StartupProfile
             ReplayableRoutes.Contains);
     }
 
-    public CapturedStartupReplayCursor CreateCursor() => new(replay);
+    public CapturedStartupReplaySelector CreateSelector() => new(replay);
 
     public static StartupResponse? CreateResponse(
-        CapturedStartupReplayCursor cursor,
+        CapturedStartupReplaySelector selector,
         string route,
         PyTuple arguments)
     {
-        if (cursor.TryTake(route, arguments, out PyValue? captured))
+        if (selector.TryGet(route, arguments, out PyValue? captured))
         {
             return Response(captured!);
         }

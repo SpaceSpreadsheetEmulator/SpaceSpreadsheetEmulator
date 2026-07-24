@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Buffers;
 using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -8,6 +9,9 @@ using SpaceSpreadsheetEmulator.Backplane.Contracts.V2;
 using SpaceSpreadsheetEmulator.Cluster.Contracts.V1;
 using SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 using SpaceSpreadsheetEmulator.Protocol.MachoNet;
+using SpaceSpreadsheetEmulator.Protocol;
+using SpaceSpreadsheetEmulator.Protocol.Codec;
+using SpaceSpreadsheetEmulator.Protocol.Profiles;
 using SpaceSpreadsheetEmulator.Protocol.Values;
 using LoginRequestContext = SpaceSpreadsheetEmulator.Backplane.Contracts.V1.RequestContext;
 
@@ -62,18 +66,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             value => Assert.Equal(26, Assert.IsType<PyInteger>(value).Value),
             value => Assert.Equal(1531, Assert.IsType<PyInteger>(value).Value));
 
-        var nestedUndock = new PyTuple(
-            new PyBuffer("Undock"u8),
-            new PyTuple(new PyInteger(shipId), new PyBoolean(false)),
-            new PyDictionary(new PyDictionaryEntry(new PyText("onlineModules"), new PyDictionary())));
-        PyText shipBinding = Assert.IsType<PyText>(await client.CallAsync(
-            "ship",
-            "MachoBindObject",
-            new PyTuple(
-                new PyTuple(new PyInteger(stationId), new PyInteger(15)),
-                nestedUndock)));
-        Assert.StartsWith("N=ship:", shipBinding.Value, StringComparison.Ordinal);
-        AssertStation(await client.ReadPacketAsync(), expectedStationId: null);
+        await UndockAsync(client, stationId, shipId);
 
         using GrpcChannel workerChannel = GrpcChannel.ForAddress(topology.WorkerGrpcAddress);
         var login = new LoginGameplay.LoginGameplayClient(workerChannel);
@@ -156,16 +149,8 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         Assert.Equal("worker-topology", secondSystem.OwnerNodeId);
         Assert.Equal(9ul, secondSystem.Epoch);
 
-        PyText solarBinding = Assert.IsType<PyText>(await client.CallAsync(
-            "beyonce",
-            "MachoBindObject",
-            new PyTuple(new PyInteger(solarSystemId))));
-        Assert.IsType<PyNull>(await client.CallAsync(
-            service: null,
-            "CmdDock",
-            new PyTuple(new PyInteger(stationId), new PyInteger(shipId)),
-            solarBinding.Value));
-        AssertStation(await client.ReadPacketAsync(), stationId);
+        string solarBinding = await BindSolarSystemAsync(client, solarSystemId);
+        await DockAsync(client, stationId, shipId, solarBinding);
 
         SessionEventEnvelope left = await ReadEventAsync(
             subscription.ResponseStream,
@@ -279,19 +264,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             MachoPacket selectionNotification = await SelectCharacterAsync(client, characterId);
             shipId = CurrentSessionValue(selectionNotification, "shipid");
 
-            var nestedUndock = new PyTuple(
-                new PyBuffer("Undock"u8),
-                new PyTuple(new PyInteger(shipId), new PyBoolean(false)),
-                new PyDictionary(new PyDictionaryEntry(
-                    new PyText("onlineModules"),
-                    new PyDictionary())));
-            _ = Assert.IsType<PyText>(await client.CallAsync(
-                "ship",
-                "MachoBindObject",
-                new PyTuple(
-                    new PyTuple(new PyInteger(stationId), new PyInteger(15)),
-                    nestedUndock)));
-            AssertStation(await client.ReadPacketAsync(), expectedStationId: null);
+            await UndockAsync(client, stationId, shipId);
         }
 
         await using (StandaloneTopology second = await StandaloneTopology.StartAsync(
@@ -313,16 +286,8 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
             MachoPacket selectionNotification = await SelectCharacterAsync(client, characterId);
             AssertSelectionStation(selectionNotification, expectedStationId: null);
 
-            PyText solarBinding = Assert.IsType<PyText>(await client.CallAsync(
-                "beyonce",
-                "MachoBindObject",
-                new PyTuple(new PyInteger(solarSystemId))));
-            Assert.IsType<PyNull>(await client.CallAsync(
-                service: null,
-                "CmdDock",
-                new PyTuple(new PyInteger(stationId), new PyInteger(shipId)),
-                solarBinding.Value));
-            AssertStation(await client.ReadPacketAsync(), stationId);
+            string solarBinding = await BindSolarSystemAsync(client, solarSystemId);
+            await DockAsync(client, stationId, shipId, solarBinding);
         }
     }
 
@@ -389,6 +354,82 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         return notification;
     }
 
+    private static async Task UndockAsync(
+        ProtocolLoopbackClient client,
+        long stationId,
+        long shipId)
+    {
+        var nestedUndock = new PyTuple(
+            new PyBuffer("Undock"u8),
+            new PyTuple(new PyInteger(shipId), new PyBoolean(false)),
+            new PyDictionary(new PyDictionaryEntry(
+                new PyText("onlineModules"),
+                new PyDictionary())));
+        long callId = await client.WriteCallAsync(
+            "ship",
+            "MachoBindObject",
+            new PyTuple(
+                new PyTuple(new PyInteger(stationId), new PyInteger(15)),
+                nestedUndock));
+        AssertStation(await client.ReadPacketAsync(), expectedStationId: null);
+        PyTuple lease = Assert.IsType<PyTuple>(
+            await client.ReadCallResponseAsync(callId));
+        Assert.StartsWith("N=ship:", LeaseBinding(lease.Items[0]), StringComparison.Ordinal);
+        Assert.IsType<PyNull>(lease.Items[1]);
+    }
+
+    private static async Task<string> BindSolarSystemAsync(
+        ProtocolLoopbackClient client,
+        long solarSystemId)
+    {
+        PyTuple lease = Assert.IsType<PyTuple>(await client.CallAsync(
+            "beyonce",
+            "MachoBindObject",
+            new PyTuple(new PyInteger(solarSystemId))));
+        string binding = LeaseBinding(lease.Items[0]);
+        Assert.StartsWith("N=solarsystem:", binding, StringComparison.Ordinal);
+        Assert.IsType<PyNull>(lease.Items[1]);
+        AssertNotification(await client.ReadPacketAsync(), "DoDestinyUpdate");
+        return binding;
+    }
+
+    private static async Task DockAsync(
+        ProtocolLoopbackClient client,
+        long stationId,
+        long shipId,
+        string solarBinding)
+    {
+        Assert.IsType<PyNull>(await client.CallAsync(
+            service: null,
+            "CmdDock",
+            new PyTuple(new PyInteger(stationId), new PyInteger(shipId)),
+            solarBinding));
+        AssertNotification(await client.ReadPacketAsync(), "OnDockingAccepted");
+        AssertNotification(await client.ReadPacketAsync(), "DoDestinyUpdate");
+        AssertNotification(await client.ReadPacketAsync(), "OnMachoObjectDisconnect");
+        AssertStation(await client.ReadPacketAsync(), stationId);
+        AssertNotification(await client.ReadPacketAsync(), "OnDockingFinished");
+    }
+
+    private static string LeaseBinding(PyValue value)
+    {
+        PySubstream substream = Assert.IsType<PySubstream>(
+            Assert.IsType<PySubstructure>(value).Value);
+        DecodeResult<PyValue> decoded = BlueMarshalCodec.Decode(
+            new ReadOnlySequence<byte>(substream.Data.AsMemory()),
+            ProtocolProfileCatalog.GetRequired(3_396_210));
+        Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
+        PyBuffer binding = Assert.IsType<PyBuffer>(
+            Assert.IsType<PyTuple>(decoded.Value).Items[0]);
+        return System.Text.Encoding.UTF8.GetString(binding.Value.AsSpan());
+    }
+
+    private static void AssertNotification(MachoPacket packet, string scope)
+    {
+        Assert.Equal(12, packet.NumericType);
+        Assert.Equal(scope, Assert.IsType<MachoBroadcastAddress>(packet.Destination).Scope);
+    }
+
     private static void AssertSelectionStation(MachoPacket packet, long? expectedStationId)
     {
         Assert.Equal(16, packet.NumericType);
@@ -397,8 +438,8 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
 
     private static void AssertStation(MachoPacket packet, long? expectedStationId)
     {
-        Assert.Equal(12, packet.NumericType);
-        AssertStationChange(Assert.IsType<PyDictionary>(packet.Payload), expectedStationId);
+        Assert.Equal(16, packet.NumericType);
+        AssertStationChange(SessionChanges(packet), expectedStationId);
     }
 
     private static void AssertStationChange(PyDictionary session, long? expectedStationId)

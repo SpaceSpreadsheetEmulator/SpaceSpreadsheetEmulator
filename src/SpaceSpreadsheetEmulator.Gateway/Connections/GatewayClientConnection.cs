@@ -39,7 +39,7 @@ internal sealed partial class GatewayClientConnection(
     private readonly FrameWriter frameWriter = new();
     private readonly ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(ProtocolProfileCatalog.SupportedBuild);
     private readonly ZlibPayloadCodec compression = new();
-    private readonly CapturedStartupReplayCursor startupReplay = startupProfile.CreateCursor();
+    private readonly CapturedStartupReplaySelector startupReplay = startupProfile.CreateSelector();
     private HandshakeState state = HandshakeState.WaitVersion;
     private AesCbcFrameCipher? cipher;
     private BackendLoginSession? loginSession;
@@ -50,6 +50,7 @@ internal sealed partial class GatewayClientConnection(
     private CancellationTokenSource? connectionLifetime;
     private CancellationTokenSource? solarSubscriptionCancellation;
     private Task? solarSubscriptionTask;
+    private GatewayOutboundSequencer? outboundSequencer;
 
     public void Dispose()
     {
@@ -81,14 +82,16 @@ internal sealed partial class GatewayClientConnection(
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
-            SingleWriter = true,
+            SingleWriter = false,
         });
+        using var sequencer = new GatewayOutboundSequencer(outbound.Writer);
+        outboundSequencer = sequencer;
 
         Task writerTask = WriteFramesAsync(output, outbound.Reader, connectionToken);
         try
         {
             await QueueValueAsync(HandshakeValueCodec.EncodeServerVersion(profile), outbound.Writer, encrypt: false, connectionToken);
-            await ReadFramesAsync(input, outbound.Writer, connectionToken);
+            await ReadFramesAsync(input, outbound.Writer, sequencer, connectionToken);
         }
         catch (OperationCanceledException) when (connectionToken.IsCancellationRequested)
         {
@@ -120,6 +123,7 @@ internal sealed partial class GatewayClientConnection(
 
                 Dispose();
                 connectionLifetime = null;
+                outboundSequencer = null;
             }
         }
     }
@@ -127,6 +131,7 @@ internal sealed partial class GatewayClientConnection(
     private async Task ReadFramesAsync(
         PipeReader input,
         ChannelWriter<OutboundFrame> outbound,
+        GatewayOutboundSequencer sequencer,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -144,7 +149,11 @@ internal sealed partial class GatewayClientConnection(
 
             foreach (byte[] payload in batch.Payloads)
             {
-                ProtocolError? error = await ProcessFrameAsync(payload, outbound, cancellationToken);
+                ProtocolError? error = await ProcessFrameAsync(
+                    payload,
+                    outbound,
+                    sequencer,
+                    cancellationToken);
                 if (error is not null)
                 {
                     LogProtocolError(error);
@@ -167,6 +176,7 @@ internal sealed partial class GatewayClientConnection(
     private async Task<ProtocolError?> ProcessFrameAsync(
         byte[] wirePayload,
         ChannelWriter<OutboundFrame> outbound,
+        GatewayOutboundSequencer sequencer,
         CancellationToken cancellationToken)
     {
         byte[]? decrypted = null;
@@ -192,7 +202,7 @@ internal sealed partial class GatewayClientConnection(
             }
 
             return state == HandshakeState.Authenticated
-                ? await ProcessRpcAsync(decoded.Value!, outbound, cancellationToken)
+                ? await ProcessRpcAsync(decoded.Value!, sequencer, cancellationToken)
                 : await ProcessHandshakeAsync(decoded.Value!, outbound, cancellationToken);
         }
         finally
@@ -377,6 +387,12 @@ internal sealed partial class GatewayClientConnection(
         => await outbound.WriteAsync(
             new OutboundFrame(BlueMarshalCodec.Encode(value, profile), encrypt),
             cancellationToken);
+
+    private async Task WritePacketAsync(
+        MachoPacket packet,
+        ChannelWriter<OutboundFrame> outbound,
+        CancellationToken cancellationToken)
+        => await outbound.WriteAsync(CreatePacketFrame(packet), cancellationToken);
 
     private async Task WriteFramesAsync(
         PipeWriter output,

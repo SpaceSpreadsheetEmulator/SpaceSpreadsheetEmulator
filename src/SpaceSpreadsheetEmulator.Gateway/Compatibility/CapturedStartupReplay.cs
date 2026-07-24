@@ -75,12 +75,15 @@ internal sealed class CapturedStartupReplay
             loaded.Add(new CapturedReplayResponse(entry.Route, entry.Match, decoded.Value!));
         }
 
-        return new CapturedStartupReplay(loaded
-            .GroupBy(response => response.Route, StringComparer.Ordinal)
-            .ToImmutableDictionary(
-                group => group.Key,
-                group => group.ToImmutableArray(),
-                StringComparer.Ordinal));
+        ImmutableDictionary<string, ImmutableArray<CapturedReplayResponse>> responses =
+            loaded
+                .GroupBy(response => response.Route, StringComparer.Ordinal)
+                .ToImmutableDictionary(
+                    group => group.Key,
+                    group => group.ToImmutableArray(),
+                    StringComparer.Ordinal);
+        ValidateRequestKeys(responses);
+        return new CapturedStartupReplay(responses);
     }
 
     public bool TryGet(string route, out ImmutableArray<CapturedReplayResponse> routeResponses)
@@ -116,6 +119,30 @@ internal sealed class CapturedStartupReplay
         }
     }
 
+    private static void ValidateRequestKeys(
+        ImmutableDictionary<string, ImmutableArray<CapturedReplayResponse>> responses)
+    {
+        foreach ((string route, ImmutableArray<CapturedReplayResponse> entries) in responses)
+        {
+            if (entries.Count(entry => entry.Match is null) > 1)
+            {
+                throw new InvalidDataException(
+                    $"Captured startup route {route} has more than one unkeyed response.");
+            }
+
+            string? duplicate = entries
+                .Where(entry => entry.Match is not null)
+                .GroupBy(entry => entry.Match!, StringComparer.Ordinal)
+                .FirstOrDefault(group => group.Count() > 1)
+                ?.Key;
+            if (duplicate is not null)
+            {
+                throw new InvalidDataException(
+                    $"Captured startup route {route} has duplicate request key {duplicate}.");
+            }
+        }
+    }
+
     private static string ResolveFile(string root, string fileName)
     {
         if (!string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
@@ -140,13 +167,11 @@ internal sealed class CapturedStartupReplay
 }
 
 /// <summary>
-/// Consumes replay responses in manifest order while matching the current RPC arguments.
+/// Selects a replay response by stable route and request-derived key.
 /// </summary>
-internal sealed class CapturedStartupReplayCursor(CapturedStartupReplay? replay)
+internal sealed class CapturedStartupReplaySelector(CapturedStartupReplay? replay)
 {
-    private readonly Dictionary<string, int> nextIndexes = new(StringComparer.Ordinal);
-
-    public bool TryTake(string route, PyTuple arguments, out PyValue? value)
+    public bool TryGet(string route, PyTuple arguments, out PyValue? value)
     {
         value = null;
         if (replay is null || !replay.TryGet(route, out ImmutableArray<CapturedReplayResponse> responses))
@@ -168,28 +193,14 @@ internal sealed class CapturedStartupReplayCursor(CapturedStartupReplay? replay)
             return true;
         }
 
-        ImmutableArray<CapturedReplayResponse> unkeyed = responses
-            .Where(response => response.Match is null)
-            .ToImmutableArray();
-        if (unkeyed.Length == 0)
+        CapturedReplayResponse? unkeyed = responses.SingleOrDefault(
+            response => response.Match is null);
+        if (unkeyed is null)
         {
             return false;
         }
 
-        if (unkeyed.Length == 1)
-        {
-            value = unkeyed[0].Value;
-            return true;
-        }
-
-        int next = nextIndexes.GetValueOrDefault(route);
-        if (next >= unkeyed.Length)
-        {
-            return false;
-        }
-
-        nextIndexes[route] = next + 1;
-        value = unkeyed[next].Value;
+        value = unkeyed.Value;
         return true;
     }
 

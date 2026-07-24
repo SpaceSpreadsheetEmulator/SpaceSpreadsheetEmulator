@@ -1,8 +1,6 @@
 using System.Buffers;
 using System.Collections.Immutable;
-using System.Numerics;
 using System.Text;
-using System.Threading.Channels;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Gateway.Backplane;
 using SpaceSpreadsheetEmulator.Gateway.Compatibility;
@@ -17,7 +15,7 @@ internal sealed partial class GatewayClientConnection
 {
     private async Task<ProtocolError?> ProcessRpcAsync(
         PyValue value,
-        ChannelWriter<OutboundFrame> outbound,
+        GatewayOutboundSequencer outbound,
         CancellationToken cancellationToken)
     {
         byte[] marshal = BlueMarshalCodec.Encode(value, profile, EncodingMode.PreserveWireForm);
@@ -29,7 +27,9 @@ internal sealed partial class GatewayClientConnection
 
         if (packet.Value!.NumericType == 20)
         {
-            await WritePacketAsync(CreatePingResponse(packet.Value), outbound, cancellationToken);
+            await outbound.EnqueueAsync(
+                [CreatePacketFrame(CreatePingResponse(packet.Value))],
+                cancellationToken);
             return null;
         }
 
@@ -61,28 +61,23 @@ internal sealed partial class GatewayClientConnection
             loginSession.AccountId,
             dispatch.Result,
             profile);
-        foreach (MachoPacket beforeResponse in dispatch.BeforeResponse)
+        OutboundFrame[] batch =
+        [
+            .. dispatch.BeforeResponse.Select(packetToSend => CreatePacketFrame(packetToSend)),
+            CreatePacketFrame(response, dispatch.CompressResponse),
+            .. dispatch.AfterResponse.Select(packetToSend => CreatePacketFrame(packetToSend)),
+        ];
+        await outbound.EnqueueAsync(batch, cancellationToken);
+        if (dispatch.AfterBatchQueued is not null)
         {
-            await WritePacketAsync(beforeResponse, outbound, cancellationToken);
-        }
-
-        await WritePacketAsync(
-            response,
-            outbound,
-            cancellationToken,
-            compress: dispatch.CompressResponse);
-        foreach (MachoPacket afterResponse in dispatch.AfterResponse)
-        {
-            await WritePacketAsync(afterResponse, outbound, cancellationToken);
+            await dispatch.AfterBatchQueued(cancellationToken);
         }
 
         return null;
     }
 
-    private async Task WritePacketAsync(
+    private OutboundFrame CreatePacketFrame(
         MachoPacket packet,
-        ChannelWriter<OutboundFrame> outbound,
-        CancellationToken cancellationToken,
         bool compress = false)
     {
         byte[] payload = MachoPacketCodec.Encode(packet, profile);
@@ -91,9 +86,7 @@ internal sealed partial class GatewayClientConnection
             payload = compression.Compress(payload);
         }
 
-        await outbound.WriteAsync(
-            new OutboundFrame(payload, Encrypt: cipher is not null),
-            cancellationToken);
+        return new OutboundFrame(payload, Encrypt: cipher is not null);
     }
 
     private MachoPacket CreatePingResponse(MachoPacket request)
@@ -169,6 +162,8 @@ internal sealed partial class GatewayClientConnection
             "corpRegistry.MachoBindObject" => BindCorporationRegistry(request),
             "standingMgr.GetNPCNPCStandings" => GetNpcNpcStandings(request),
             "standingMgr.GetCharStandings" => GetCharacterStandings(request),
+            "beyonce.GetFormations" => GetSolarSystemFormations(request),
+            "beyonce.MachoResolveObject" => ResolveSolarSystem(request),
             "skillMgr2.GetMySkillHandler" => GetSkillHandler(request),
             "skillMgr2.MachoBindObject" => BindSkillHandler(request),
             "agentMgr.GetAgents" => await GetAgentsAsync(request, cancellationToken),
@@ -182,6 +177,7 @@ internal sealed partial class GatewayClientConnection
             "bound.GetAggressionSettings" => GetCorporationAggressionSettings(request),
             "bound.GetEveOwners" => GetCorporationMembers(request),
             "beyonce.MachoBindObject" => await BindSolarSystemAsync(request, cancellationToken),
+            "bound.CmdGotoDirection" => await SetMovementIntentAsync(request, cancellationToken),
             "bound.CmdDock" => await DockAsync(request, cancellationToken),
             _ => null,
         };
@@ -302,162 +298,6 @@ internal sealed partial class GatewayClientConnection
             : CacheMethodResult("map", "GetStationInfo", stationInfo);
     }
 
-    private async Task<RpcDispatchResult> UndockAsync(
-        MachoRpcRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (selectedCharacter is null
-            || !TryReadUndockArguments(request.Arguments, out long stationId, out long shipId)
-            || stationId != selectedCharacter.StationId
-            || shipId != selectedCharacter.ShipId)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        SolarSystemRoute? route = await solarSystemBackend.ResolveAsync(
-            selectedCharacter.SolarSystemId,
-            cancellationToken);
-        if (route is null)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        SolarSystemTransition? transition = await solarSystemBackend.RequestUndockAsync(
-            route,
-            gatewaySessionId,
-            loginSession!.LoginTicket,
-            selectedCharacter,
-            checked((int)stationId),
-            request.CallId,
-            cancellationToken);
-        if (transition is null)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        int? previousStationId = selectedCharacter.StationId;
-        ApplyTransition(transition);
-        solarSystemBinding = $"N=solarsystem:{transition.SolarSystemId}:{transition.Epoch}";
-        await StartSolarSystemSubscriptionAsync(route, cancellationToken);
-        return Result(
-            new PyText($"N=ship:{transition.ShipId}:{transition.Epoch}"),
-            afterResponse:
-            [
-                CreateSessionNotification(previousStationId, stationId: null),
-            ]);
-    }
-
-    private async Task<RpcDispatchResult> BindSolarSystemAsync(
-        MachoRpcRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (selectedCharacter is null
-            || request.Arguments.Items.Length == 0
-            || !TryInteger(request.Arguments.Items[0], out long solarSystemId)
-            || solarSystemId != selectedCharacter.SolarSystemId)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        if (solarSystemBinding is null && !selectedCharacter.HasStationId)
-        {
-            SolarSystemRoute? route = await solarSystemBackend.ResolveAsync(
-                selectedCharacter.SolarSystemId,
-                cancellationToken);
-            if (route is null)
-            {
-                return Result(PyNull.Instance);
-            }
-
-            solarSystemBinding = $"N=solarsystem:{route.SolarSystemId}:{route.Epoch}";
-            await StartSolarSystemSubscriptionAsync(route, cancellationToken);
-        }
-
-        return solarSystemBinding is null
-            ? Result(PyNull.Instance)
-            : Result(new PyText(solarSystemBinding));
-    }
-
-    private async Task<RpcDispatchResult> DockAsync(
-        MachoRpcRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (selectedCharacter is null
-            || solarSystemBinding is null
-            || !string.Equals(request.BoundObject, solarSystemBinding, StringComparison.Ordinal)
-            || !TryReadDockArguments(request.Arguments, out long stationId, out long shipId)
-            || selectedCharacter.HasStationId
-            || shipId != selectedCharacter.ShipId)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        SolarSystemRoute? route = await solarSystemBackend.ResolveAsync(
-            selectedCharacter.SolarSystemId,
-            cancellationToken);
-        if (route is null)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        SolarSystemTransition? transition = await solarSystemBackend.RequestDockAsync(
-            route,
-            gatewaySessionId,
-            loginSession!.LoginTicket,
-            selectedCharacter,
-            checked((int)stationId),
-            request.CallId,
-            cancellationToken);
-        if (transition is null)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        ApplyTransition(transition);
-        solarSystemBinding = null;
-        await StopSolarSystemSubscriptionAsync(cancel: false);
-        return Result(
-            PyNull.Instance,
-            afterResponse:
-            [
-                CreateSessionNotification(previousStationId: null, transition.StationId),
-            ]);
-    }
-
-    private void ApplyTransition(SolarSystemTransition transition)
-    {
-        CharacterSummary updated = selectedCharacter!.Clone();
-        if (transition.StationId is int stationId)
-        {
-            updated.StationId = stationId;
-        }
-        else
-        {
-            updated.ClearStationId();
-        }
-
-        selectedCharacter = updated;
-    }
-
-    private MachoPacket CreateSessionNotification(int? previousStationId, int? stationId)
-    {
-        CharacterSummary character = selectedCharacter
-            ?? throw new InvalidOperationException("A character must be selected before emitting a session notification.");
-        long clientId = checked(1_000_000L + loginSession!.AccountId);
-        return new MachoPacket(
-            "carbon.common.script.net.machoNetPacket.Notification",
-            12,
-            new MachoNodeAddress(ProxyNodeId, null),
-            new MachoClientAddress(clientId, null),
-            loginSession.AccountId,
-            Dictionary(
-                ("charid", Change(null, character.CharacterId)),
-                ("stationid", Change(previousStationId, stationId)),
-                ("shipid", Change(null, character.ShipId)),
-                ("solarsystemid", Change(null, character.SolarSystemId))),
-            DefaultPacketExtensions());
-    }
-
     private MachoPacket CreateInitialSessionNotification(long clientId)
     {
         BackendLoginSession session = loginSession
@@ -573,6 +413,19 @@ internal sealed partial class GatewayClientConnection
         return false;
     }
 
+    private static bool TryFloat(PyValue value, out double result)
+    {
+        value = Unwrap(value);
+        if (value is PyFloat number && double.IsFinite(number.Value))
+        {
+            result = number.Value;
+            return true;
+        }
+
+        result = 0;
+        return false;
+    }
+
     private static PyValue Unwrap(PyValue value)
         => value is PySavedValueReference reference ? reference.Value : value;
 
@@ -617,43 +470,26 @@ internal sealed partial class GatewayClientConnection
             _ => null,
         };
 
-    private static PyTuple Change(long? previous, long? current)
-        => new(NumberOrNull(previous), NumberOrNull(current));
-
     private static PyTuple Change(PyValue previous, PyValue current)
         => new(previous, current);
-
-    private static PyValue NumberOrNull(long? value)
-        => value is long number ? new PyInteger(number) : PyNull.Instance;
-
-    private static ImmutableArray<PyValue> DefaultPacketExtensions()
-        =>
-        [
-            new PyDictionary(),
-            PyNull.Instance,
-            PyNull.Instance,
-            PyNull.Instance,
-            PyNull.Instance,
-            new PyBoolean(false),
-            new PyInteger(0),
-            new PyInteger(1000),
-            PyNull.Instance,
-        ];
 
     private static RpcDispatchResult Result(
         PyValue result,
         ImmutableArray<MachoPacket> beforeResponse = default,
         ImmutableArray<MachoPacket> afterResponse = default,
-        bool compressResponse = false)
+        bool compressResponse = false,
+        Func<CancellationToken, Task>? afterBatchQueued = null)
         => new(
             result,
             beforeResponse.IsDefault ? [] : beforeResponse,
             afterResponse.IsDefault ? [] : afterResponse,
-            compressResponse);
+            compressResponse,
+            afterBatchQueued);
 
     private sealed record RpcDispatchResult(
         PyValue Result,
         ImmutableArray<MachoPacket> BeforeResponse,
         ImmutableArray<MachoPacket> AfterResponse,
-        bool CompressResponse);
+        bool CompressResponse,
+        Func<CancellationToken, Task>? AfterBatchQueued);
 }

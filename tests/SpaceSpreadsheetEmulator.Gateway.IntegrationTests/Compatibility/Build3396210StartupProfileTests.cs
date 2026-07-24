@@ -9,7 +9,7 @@ public sealed class Build3396210StartupProfileTests
     public void EveryFallbackRouteReturnsItsAuthoredShape()
     {
         var profile = new Build3396210StartupProfile(new GatewayCompatibilityOptions());
-        CapturedStartupReplayCursor cursor = profile.CreateCursor();
+        CapturedStartupReplaySelector selector = profile.CreateSelector();
         string[] routes =
         [
             "machoNet.GetServiceInfo",
@@ -34,7 +34,7 @@ public sealed class Build3396210StartupProfileTests
 
         StartupResponse[] responses = routes
             .Select(route => Assert.IsType<StartupResponse>(
-                Build3396210StartupProfile.CreateResponse(cursor, route, new PyTuple())))
+                Build3396210StartupProfile.CreateResponse(selector, route, new PyTuple())))
             .ToArray();
 
         Assert.IsType<PyDictionary>(responses[0].Value);
@@ -54,7 +54,7 @@ public sealed class Build3396210StartupProfileTests
         Assert.IsType<PyBoolean>(responses[14].Value);
         Assert.All(responses[15..], response => Assert.IsType<PyNull>(response.Value));
         Assert.Null(Build3396210StartupProfile.CreateResponse(
-            cursor,
+            selector,
             "unsupported.Route",
             new PyTuple()));
     }

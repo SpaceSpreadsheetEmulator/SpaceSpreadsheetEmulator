@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Immutable;
 using System.Text;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
 using SpaceSpreadsheetEmulator.Protocol.Profiles;
@@ -21,7 +22,45 @@ public sealed record MachoClientNotification(
 public static class MachoNotificationCodec
 {
     private const int NotificationType = 12;
+    private const string NotificationObjectType =
+        "carbon.common.script.net.machoNetPacket.Notification";
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+
+    /// <summary>
+    /// Creates one server-to-client broadcast notification with an independently marshalled body.
+    /// </summary>
+    public static MachoPacket CreateServerBroadcast(
+        string method,
+        long sourceNodeId,
+        long userId,
+        PyTuple arguments,
+        ProtocolProfile profile,
+        string service = "clientID")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(method);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sourceNodeId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(userId);
+        ArgumentNullException.ThrowIfNull(arguments);
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentException.ThrowIfNullOrWhiteSpace(service);
+
+        byte[] body = BlueMarshalCodec.Encode(
+            new PyTuple(
+                new PyInteger(0),
+                new PyTuple(new PyInteger(1), arguments)),
+            profile);
+        return new MachoPacket(
+            NotificationObjectType,
+            NotificationType,
+            new MachoNodeAddress(sourceNodeId, null),
+            new MachoBroadcastAddress(method, new PyList(), service),
+            userId,
+            new PyTuple(
+                new PyTuple(
+                    new PyInteger(0),
+                    new PySubstream(ImmutableArray.Create(body)))),
+            Enumerable.Repeat<PyValue>(PyNull.Instance, 9).ToImmutableArray());
+    }
 
     public static DecodeResult<MachoClientNotification> DecodeClientNotification(
         MachoPacket packet,

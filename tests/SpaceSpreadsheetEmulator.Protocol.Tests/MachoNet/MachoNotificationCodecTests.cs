@@ -9,6 +9,45 @@ namespace SpaceSpreadsheetEmulator.Protocol.Tests.MachoNet;
 public class MachoNotificationCodecTests
 {
     [Fact]
+    public void ServerBroadcastNotificationHasStableEnvelope()
+    {
+        ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
+        var arguments = new PyTuple(
+            new PyList(new PyTuple(new PyInteger(42), new PyText("state"))),
+            new PyBoolean(false),
+            new PyList());
+
+        MachoPacket packet = MachoNotificationCodec.CreateServerBroadcast(
+            "DoDestinyUpdate",
+            1,
+            7,
+            arguments,
+            profile);
+
+        Assert.Equal(12, packet.NumericType);
+        Assert.Equal(new MachoNodeAddress(1, null), packet.Source);
+        MachoBroadcastAddress destination = Assert.IsType<MachoBroadcastAddress>(packet.Destination);
+        Assert.Equal("DoDestinyUpdate", destination.Scope);
+        Assert.Equal("clientID", destination.Service);
+        Assert.Empty(Assert.IsType<PyList>(destination.Narrowcast).Items);
+        PyTuple payload = Assert.IsType<PyTuple>(packet.Payload);
+        PyTuple envelope = Assert.IsType<PyTuple>(Assert.Single(payload.Items));
+        Assert.Equal(0, Assert.IsType<PyInteger>(envelope.Items[0]).Value);
+        PySubstream substream = Assert.IsType<PySubstream>(envelope.Items[1]);
+        DecodeResult<PyValue> decoded = BlueMarshalCodec.Decode(
+            new System.Buffers.ReadOnlySequence<byte>(substream.Data.AsMemory()),
+            profile);
+        Assert.True(decoded.IsSuccess, decoded.Error?.ToString());
+        PyTuple body = Assert.IsType<PyTuple>(decoded.Value);
+        Assert.Equal(0, Assert.IsType<PyInteger>(body.Items[0]).Value);
+        PyTuple routed = Assert.IsType<PyTuple>(body.Items[1]);
+        Assert.Equal(1, Assert.IsType<PyInteger>(routed.Items[0]).Value);
+        PyTuple decodedArguments = Assert.IsType<PyTuple>(routed.Items[1]);
+        Assert.True(PyValueComparers.Semantic.Equals(arguments, decodedArguments));
+        Assert.All(packet.Extensions, extension => Assert.IsType<PyNull>(extension));
+    }
+
+    [Fact]
     public void ClientObjectReleaseNotificationIsDecoded()
     {
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);

@@ -96,6 +96,55 @@ public sealed class Build3396210SessionMapperTests
         Assert.Equal(30_002_780, Integer(changes, "solarsystemid2"));
     }
 
+    [Fact]
+    public void UndockMovesLocationIntoSolarSystem()
+    {
+        CharacterSummary character = Character();
+        character.ClearStationId();
+
+        MachoPacket packet = Build3396210SessionMapper.CreateUndock(
+            gatewaySessionId: 100,
+            proxyNodeId: 1,
+            clientId: 1_000_007,
+            userId: 7,
+            previousStationId: 60_000_004,
+            character,
+            []);
+
+        Assert.Equal(16, packet.NumericType);
+        PyDictionary changes = Changes(packet);
+        Assert.Equal(["stationid", "locationid", "solarsystemid"], changes.Entries.Select(Key));
+        Assert.Equal(60_000_004, Integer(changes, "stationid", previous: true));
+        Assert.IsType<PyNull>(Current(changes, "stationid"));
+        Assert.Equal(60_000_004, Integer(changes, "locationid", previous: true));
+        Assert.Equal(30_002_780, Integer(changes, "locationid"));
+        Assert.IsType<PyNull>(Previous(changes, "solarsystemid"));
+        Assert.Equal(30_002_780, Integer(changes, "solarsystemid"));
+    }
+
+    [Fact]
+    public void DockMovesLocationIntoStation()
+    {
+        CharacterSummary character = Character();
+
+        MachoPacket packet = Build3396210SessionMapper.CreateDock(
+            gatewaySessionId: 100,
+            proxyNodeId: 1,
+            clientId: 1_000_007,
+            userId: 7,
+            stationId: 60_000_004,
+            character,
+            []);
+
+        PyDictionary changes = Changes(packet);
+        Assert.IsType<PyNull>(Previous(changes, "stationid"));
+        Assert.Equal(60_000_004, Integer(changes, "stationid"));
+        Assert.Equal(30_002_780, Integer(changes, "locationid", previous: true));
+        Assert.Equal(60_000_004, Integer(changes, "locationid"));
+        Assert.Equal(30_002_780, Integer(changes, "solarsystemid", previous: true));
+        Assert.IsType<PyNull>(Current(changes, "solarsystemid"));
+    }
+
     private static CharacterSummary Character()
         => new()
         {
@@ -121,8 +170,15 @@ public sealed class Build3396210SessionMapperTests
     private static long Integer(PyDictionary changes, string key)
         => Assert.IsType<PyInteger>(Current(changes, key)).Value;
 
+    private static long Integer(PyDictionary changes, string key, bool previous)
+        => Assert.IsType<PyInteger>(
+            previous ? Previous(changes, key) : Current(changes, key)).Value;
+
     private static PyValue Current(PyDictionary changes, string key)
         => Assert.IsType<PyTuple>(changes.Entries.Single(entry => Key(entry) == key).Value).Items[1];
+
+    private static PyValue Previous(PyDictionary changes, string key)
+        => Assert.IsType<PyTuple>(changes.Entries.Single(entry => Key(entry) == key).Value).Items[0];
 
     private static string Key(PyDictionaryEntry entry)
         => Assert.IsType<PyText>(entry.Key).Value;

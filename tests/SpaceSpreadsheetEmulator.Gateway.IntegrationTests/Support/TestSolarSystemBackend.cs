@@ -16,6 +16,8 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
 
     public int SubscriptionClosedCount { get; private set; }
 
+    public int MovementIntentCount { get; private set; }
+
     public Task<SolarSystemRoute?> ResolveAsync(
         int solarSystemId,
         CancellationToken cancellationToken)
@@ -75,7 +77,21 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
         CharacterSummary character,
         SolarSystemMovementIntent intent,
         CancellationToken cancellationToken)
-        => Task.FromResult<SolarSystemEntityState?>(null);
+    {
+        MovementIntentCount++;
+        return Task.FromResult<SolarSystemEntityState?>(new SolarSystemEntityState(
+            character.CharacterId,
+            character.ShipId,
+            route.SolarSystemId,
+            route.Epoch,
+            2,
+            101,
+            -50,
+            25,
+            intent.DirectionX * intent.RequestedSpeed,
+            intent.DirectionY * intent.RequestedSpeed,
+            intent.DirectionZ * intent.RequestedSpeed));
+    }
 
     public async IAsyncEnumerable<SolarSystemSessionEvent> SubscribeSessionAsync(
         SolarSystemRoute route,
@@ -95,7 +111,20 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
                 route.SolarSystemId,
                 route.Epoch,
                 0,
-                [],
+                [
+                    new SolarSystemEntityState(
+                        character.CharacterId,
+                        character.ShipId,
+                        route.SolarSystemId,
+                        route.Epoch,
+                        1,
+                        100,
+                        -50,
+                        25,
+                        0,
+                        0,
+                        0),
+                ],
                 null,
                 null,
                 null);
