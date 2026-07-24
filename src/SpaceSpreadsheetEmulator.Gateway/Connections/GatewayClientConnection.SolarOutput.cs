@@ -194,14 +194,18 @@ internal sealed partial class GatewayClientConnection
                     character,
                     item.Snapshot.Single(entity =>
                         entity.CharacterId == character.CharacterId
-                        && entity.ShipId == character.ShipId)),
+                        && entity.ShipId == character.ShipId),
+                    item.StaticObjects ?? [],
+                    timeProvider.GetUtcNow()),
             SolarSystemSessionEventKind.EntityEntered
                 when item.Entity?.CharacterId == character.CharacterId =>
                 Build3396210SpaceSessionMapper.CreateSnapshot(
                     ProxyNodeId,
                     loginSession!.AccountId,
                     character,
-                    item.Entity),
+                    item.Entity,
+                    [],
+                    timeProvider.GetUtcNow()),
             SolarSystemSessionEventKind.EntityMoved
                 or SolarSystemSessionEventKind.ShipStateChanged
                 when item.Entity?.CharacterId == character.CharacterId =>

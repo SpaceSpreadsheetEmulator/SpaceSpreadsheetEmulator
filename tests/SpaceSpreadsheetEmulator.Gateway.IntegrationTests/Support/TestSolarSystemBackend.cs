@@ -130,7 +130,45 @@ internal sealed class TestSolarSystemBackend : ISolarSystemBackend
                 ],
                 null,
                 null,
-                null);
+                null,
+                [
+                    new SolarSystemStaticObjectState(
+                        40_176_368,
+                        2016,
+                        "Test Planet",
+                        SolarSystemStaticObjectKind.Planet,
+                        route.SolarSystemId,
+                        1_000_000,
+                        0,
+                        0,
+                        2_150_000,
+                        null,
+                        1),
+                    new SolarSystemStaticObjectState(
+                        50_006_751,
+                        16,
+                        "Test Gate",
+                        SolarSystemStaticObjectKind.JumpGate,
+                        route.SolarSystemId,
+                        0,
+                        1_000_000,
+                        0,
+                        3_532,
+                        30_000_142,
+                        500_001),
+                    new SolarSystemStaticObjectState(
+                        60_000_004,
+                        1531,
+                        "Test Station",
+                        SolarSystemStaticObjectKind.Station,
+                        route.SolarSystemId,
+                        0,
+                        0,
+                        0,
+                        10_000,
+                        null,
+                        1_000_002),
+                ]);
             await streamCompleted.Task.WaitAsync(cancellationToken);
         }
         finally

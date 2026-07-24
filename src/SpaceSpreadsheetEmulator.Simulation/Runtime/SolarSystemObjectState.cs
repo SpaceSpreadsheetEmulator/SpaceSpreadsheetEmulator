@@ -25,7 +25,8 @@ public sealed record SolarSystemObjectState
         SolarSystemId solarSystemId,
         SolarVector3 position,
         double radius,
-        int? destinationSolarSystemId = null)
+        int? destinationSolarSystemId = null,
+        int ownerId = 1)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(entityId);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(typeId);
@@ -42,6 +43,7 @@ public sealed record SolarSystemObjectState
                 "A solar-system object radius must be finite and positive.");
         }
 
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ownerId);
         bool isJumpGate = kind is SolarSystemObjectKind.JumpGate;
         if (isJumpGate != destinationSolarSystemId.HasValue
             || destinationSolarSystemId is <= 0
@@ -60,6 +62,7 @@ public sealed record SolarSystemObjectState
         Position = position;
         Radius = radius;
         DestinationSolarSystemId = destinationSolarSystemId;
+        OwnerId = ownerId;
     }
 
     public long EntityId { get; }
@@ -77,4 +80,6 @@ public sealed record SolarSystemObjectState
     public double Radius { get; }
 
     public int? DestinationSolarSystemId { get; }
+
+    public int OwnerId { get; }
 }

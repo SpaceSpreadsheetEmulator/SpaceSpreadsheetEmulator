@@ -68,6 +68,26 @@ internal sealed class TestLoginBackend : ILoginBackend
             Balance = "5000",
             SkillPoints = 400_000,
         };
+        character.ShipDogmaAttributes.Add(new DogmaAttributeValue
+        {
+            AttributeId = 9,
+            Value = 175,
+        });
+        character.ShipDogmaAttributes.Add(new DogmaAttributeValue
+        {
+            AttributeId = 263,
+            Value = 200,
+        });
+        character.ShipDogmaAttributes.Add(new DogmaAttributeValue
+        {
+            AttributeId = 265,
+            Value = 125,
+        });
+        character.ShipDogmaAttributes.Add(new DogmaAttributeValue
+        {
+            AttributeId = 479,
+            Value = 860_000,
+        });
         character.InventoryItems.Add(new CharacterInventoryItem
         {
             ItemId = 190_000_008,

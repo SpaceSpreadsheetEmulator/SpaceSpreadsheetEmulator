@@ -218,7 +218,17 @@ public class ConnectionIoTests
         Assert.Equal("utillib.KeyVal", Text(allInfo.Type));
         PyDictionary dogmaState = Assert.IsType<PyDictionary>(allInfo.State);
         Assert.Equal(190_000_007, Assert.IsType<PyInteger>(Value(dogmaState, "activeShipID")).Value);
-        Assert.Single(Assert.IsType<PyDictionary>(Value(dogmaState, "shipInfo")).Entries);
+        PyDictionary shipInfo = Assert.IsType<PyDictionary>(Value(dogmaState, "shipInfo"));
+        PyObject shipDogma = Assert.IsType<PyObject>(Assert.Single(shipInfo.Entries).Value);
+        PyDictionary shipDogmaState = Assert.IsType<PyDictionary>(shipDogma.State);
+        PyDictionary shipAttributes = Assert.IsType<PyDictionary>(
+            Value(shipDogmaState, "attributes"));
+        Assert.Collection(
+            shipAttributes.Entries,
+            attribute => AssertDogmaAttribute(attribute, 9, 175),
+            attribute => AssertDogmaAttribute(attribute, 263, 200),
+            attribute => AssertDogmaAttribute(attribute, 265, 125),
+            attribute => AssertDogmaAttribute(attribute, 479, 860_000));
         PyTuple charInfo = Assert.IsType<PyTuple>(Value(dogmaState, "charInfo"));
         Assert.Equal(2, charInfo.Items.Length);
         Assert.Equal(4, Assert.IsType<PyTuple>(charInfo.Items[1]).Items.Length);
@@ -1377,6 +1387,15 @@ public class ConnectionIoTests
 
     private static PyValue Value(PyDictionary dictionary, long key)
         => dictionary.Entries.Single(entry => entry.Key is PyInteger integer && integer.Value == key).Value;
+
+    private static void AssertDogmaAttribute(
+        PyDictionaryEntry entry,
+        int attributeId,
+        double value)
+    {
+        Assert.Equal(attributeId, Assert.IsType<PyInteger>(entry.Key).Value);
+        Assert.Equal(value, Assert.IsType<PyFloat>(entry.Value).Value);
+    }
 
     private static string Text(PyValue value)
         => value switch

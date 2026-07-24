@@ -97,6 +97,10 @@ public sealed class CharacterSelectionQuery(
         long shipCategoryId = shipGroup.ParentId
             ?? throw new InvalidDataException(
                 $"Required category relationship for group/{shipGroup.Id} is missing.");
+        TypeDogmaDefinition shipDogma =
+            await staticData.FindTypeDogmaAsync(character.ShipTypeId, cancellationToken)
+            ?? throw new InvalidDataException(
+                $"Required Dogma profile for type/{character.ShipTypeId} is missing.");
         IReadOnlyList<CharacterInventoryItem> inventoryItems = await MapInventoryAsync(
             character.InventoryItems,
             cancellationToken);
@@ -133,7 +137,10 @@ public sealed class CharacterSelectionQuery(
                 template.StartingBalance,
                 template.StartingSkillPoints,
                 character.LastLoginAt,
-                inventoryItems),
+                inventoryItems,
+                shipDogma.Attributes.ToDictionary(
+                    attribute => attribute.AttributeId,
+                    attribute => attribute.Value)),
         ]);
     }
 

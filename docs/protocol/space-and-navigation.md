@@ -92,8 +92,10 @@ space view does not finish. An empty or internally mixed-timestamp snapshot is n
 a successful undock.
 
 The backend transition, binding, snapshot-first stream, and current Destiny
-mapping are **Server-covered**. The full graphical build-3396210 undock remains
-**Open**.
+mapping are **Server-covered**. A controlled graphical run has reached the
+inflight view and rendered the active ship. Ship health and authored-object
+overview population remain a graphical checkpoint until the current richer
+snapshot is exercised by the client.
 
 ### Build-3396210 bootstrap compatibility constraints
 
@@ -132,11 +134,15 @@ wire-proven.
 ### Playable environment after inflight bootstrap
 
 A minimal ego-only `SetState` can establish camera and ship UI, but it does not
-make space meaningfully playable. The next snapshot/delta checkpoint adds authored
-nearby stations, planets, gates, and other ships, with a matching ball and slim for
-each. Those objects enable overview, approach/orbit, docking-range, targeting,
-warp-destination, and jump-gate tests; they are not prerequisites for the first
-inflight view.
+make space meaningfully playable. The current initial snapshot maps Worker-authored
+nearby stations, planets, and gates to
+matching rigid balls and typed slim items. It also includes a full-health Destiny
+damage entry, solar-system item context, and the build-pinned ship type's Dogma
+attributes (including shield, armor, and structure capacity). These mappings are
+**Server-covered**; they do not yet prove damage transitions, object filtering,
+warp, jump, or the graphical health/overview checkpoint. Nearby objects enable
+overview, approach/orbit, docking-range, targeting, warp-destination, and jump-gate
+tests; they are not prerequisites for the first inflight view.
 
 ## Movement actions
 

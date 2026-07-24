@@ -114,6 +114,33 @@ internal static class Build3396210InventoryMapper
             ("singleton", "eve.common.script.sys.eveCfg.Singleton"));
     }
 
+    public static PyPackedRow CreateSolarSystem(CharacterSummary character)
+    {
+        ArgumentNullException.ThrowIfNull(character);
+        if (character.SolarSystemId <= 0 || character.ConstellationId <= 0)
+        {
+            throw new ArgumentException(
+                "The selected character has no valid solar-system hierarchy.",
+                nameof(character));
+        }
+
+        return Build3396210PackedRowBuilder.CreateRow(
+            ItemFields,
+            [
+                new PyInteger(character.SolarSystemId),
+                new PyInteger(5),
+                new PyInteger(1),
+                new PyInteger(character.ConstellationId),
+                new PyInteger(0),
+                new PyInteger(-1),
+                new PyInteger(5),
+                new PyInteger(2),
+                new PyBuffer(ReadOnlySpan<byte>.Empty),
+            ],
+            ("stacksize", "eve.common.script.sys.eveCfg.StackSize"),
+            ("singleton", "eve.common.script.sys.eveCfg.Singleton"));
+    }
+
     public static PyPackedRow CreateInventoryItem(CharacterInventoryItem item)
     {
         ArgumentNullException.ThrowIfNull(item);

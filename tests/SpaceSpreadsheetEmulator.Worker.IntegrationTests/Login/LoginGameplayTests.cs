@@ -75,6 +75,18 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
         Assert.Equal(25, selection.Characters[0].ShipGroupId);
         Assert.Equal(6, selection.Characters[0].ShipCategoryId);
         Assert.Collection(
+            selection.Characters[0].ShipDogmaAttributes.OrderBy(item => item.AttributeId),
+            attribute =>
+            {
+                Assert.Equal(37, attribute.AttributeId);
+                Assert.Equal(295, attribute.Value);
+            },
+            attribute =>
+            {
+                Assert.Equal(70, attribute.AttributeId);
+                Assert.Equal(4.5, attribute.Value);
+            });
+        Assert.Collection(
             selection.Characters[0].InventoryItems.OrderBy(item => item.Flag),
             item =>
             {
@@ -161,6 +173,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
                 Assert.Equal(2_016, planet.TypeId);
                 Assert.Equal(1_000_000, planet.Position.X);
                 Assert.Equal(2_150_000, planet.Radius);
+                Assert.Equal(1, planet.OwnerId);
                 Assert.False(planet.HasDestinationSolarSystemId);
             },
             gate =>
@@ -169,6 +182,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
                 Assert.Equal(SolarSystemObjectKind.JumpGate, gate.Kind);
                 Assert.Equal(16, gate.TypeId);
                 Assert.Equal(30_000_142, gate.DestinationSolarSystemId);
+                Assert.Equal(1, gate.OwnerId);
             },
             station =>
             {
@@ -176,6 +190,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
                 Assert.Equal(SolarSystemObjectKind.Station, station.Kind);
                 Assert.Equal(1_531, station.TypeId);
                 Assert.Equal("Test Station", station.Name);
+                Assert.Equal(1, station.OwnerId);
             });
 
         SolarSystemCommandResult movementAccepted =

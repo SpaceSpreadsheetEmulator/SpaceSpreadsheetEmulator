@@ -122,6 +122,7 @@ message SolarSystemObjectState {
   SolarVector3 position = 6;
   double radius = 7;
   optional int32 destination_solar_system_id = 8;
+  int32 owner_id = 9;
 }
 
 enum SolarSystemObjectKind {

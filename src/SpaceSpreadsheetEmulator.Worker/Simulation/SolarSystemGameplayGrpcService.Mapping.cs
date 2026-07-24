@@ -92,6 +92,7 @@ internal sealed partial class SolarSystemGameplayGrpcService
             SolarSystemId = state.SolarSystemId.Value,
             Position = Map(state.Position),
             Radius = state.Radius,
+            OwnerId = state.OwnerId,
         };
         if (state.DestinationSolarSystemId is int destination)
         {

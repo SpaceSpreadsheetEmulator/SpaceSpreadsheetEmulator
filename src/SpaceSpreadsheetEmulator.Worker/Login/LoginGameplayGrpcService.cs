@@ -201,6 +201,14 @@ public sealed partial class LoginGameplayGrpcService(
         }
 
         response.InventoryItems.AddRange(character.InventoryItems.Select(MapInventoryItem));
+        response.ShipDogmaAttributes.AddRange(
+            (character.ShipDogmaAttributes ?? new Dictionary<int, double>())
+            .OrderBy(attribute => attribute.Key)
+            .Select(attribute => new DogmaAttributeValue
+            {
+                AttributeId = attribute.Key,
+                Value = attribute.Value,
+            }));
         return response;
     }
 

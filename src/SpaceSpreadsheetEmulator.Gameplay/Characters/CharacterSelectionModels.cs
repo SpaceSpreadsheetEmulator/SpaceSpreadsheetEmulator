@@ -45,7 +45,8 @@ public sealed record CharacterSummary(
     decimal Balance,
     long SkillPoints,
     DateTimeOffset LastLoginAt,
-    IReadOnlyList<CharacterInventoryItem> InventoryItems);
+    IReadOnlyList<CharacterInventoryItem> InventoryItems,
+    IReadOnlyDictionary<int, double>? ShipDogmaAttributes = null);
 
 /// <summary>
 /// Describes one durable starter item included in character inventory views.

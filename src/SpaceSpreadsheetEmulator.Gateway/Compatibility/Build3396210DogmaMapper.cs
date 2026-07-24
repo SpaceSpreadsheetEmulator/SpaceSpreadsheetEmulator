@@ -24,14 +24,16 @@ internal static class Build3396210DogmaMapper
             CreateItemInfo(
                 character.ShipId,
                 Build3396210InventoryMapper.CreateActiveShip(character),
-                timestamp)));
+                timestamp,
+                CreateShipAttributes(character))));
         var characterInfo = new PyTuple(
             new PyDictionary(new PyDictionaryEntry(
                 new PyInteger(character.CharacterId),
                 CreateItemInfo(
                     character.CharacterId,
                     Build3396210InventoryMapper.CreateCharacter(character),
-                    timestamp))),
+                    timestamp,
+                    new PyDictionary()))),
             new PyTuple(
                 new PyInteger(4),
                 new PyList(),
@@ -49,14 +51,36 @@ internal static class Build3396210DogmaMapper
             Entry("shipState", CreateEmptyShipState()));
     }
 
-    private static PyObject CreateItemInfo(long itemId, PyPackedRow item, PyBigInteger timestamp)
+    private static PyObject CreateItemInfo(
+        long itemId,
+        PyPackedRow item,
+        PyBigInteger timestamp,
+        PyDictionary attributes)
         => KeyValue(
             Entry("itemID", new PyInteger(itemId)),
             Entry("invItem", item),
             Entry("activeEffects", new PyDictionary()),
             Entry("time", timestamp),
-            Entry("attributes", new PyDictionary()),
+            Entry("attributes", attributes),
             Entry("wallclockTime", timestamp));
+
+    private static PyDictionary CreateShipAttributes(CharacterSummary character)
+    {
+        if (character.ShipDogmaAttributes.Any(attribute =>
+                attribute.AttributeId <= 0 || !double.IsFinite(attribute.Value)))
+        {
+            throw new ArgumentException(
+                "The selected ship contains invalid Dogma attributes.",
+                nameof(character));
+        }
+
+        return new PyDictionary(character.ShipDogmaAttributes
+            .OrderBy(attribute => attribute.AttributeId)
+            .Select(attribute => new PyDictionaryEntry(
+                new PyInteger(attribute.AttributeId),
+                new PyFloat(attribute.Value)))
+            .ToArray());
+    }
 
     private static PyTuple CreateEmptyShipState()
         => new(

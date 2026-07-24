@@ -99,7 +99,8 @@ public sealed record SolarSystemStaticObjectState(
     double PositionY,
     double PositionZ,
     double Radius,
-    int? DestinationSolarSystemId);
+    int? DestinationSolarSystemId,
+    int OwnerId);
 
 public enum SolarSystemSessionEventKind
 {

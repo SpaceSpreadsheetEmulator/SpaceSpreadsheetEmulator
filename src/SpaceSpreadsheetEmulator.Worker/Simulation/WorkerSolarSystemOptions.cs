@@ -47,6 +47,7 @@ internal sealed class WorkerSolarSystemOptions
     {
         bool objectsAreValid = assignment.StaticObjects.All(item =>
             item.EntityId > 0
+            && item.OwnerId > 0
             && item.TypeId > 0
             && !string.IsNullOrWhiteSpace(item.Name)
             && Enum.IsDefined(item.Kind)
@@ -109,6 +110,8 @@ internal sealed class WorkerStationEntryPointOptions
 internal sealed class WorkerSolarSystemObjectOptions
 {
     public long EntityId { get; init; }
+
+    public int OwnerId { get; init; } = 1;
 
     public int TypeId { get; init; }
 

@@ -22,24 +22,38 @@ internal static class Build3396210SpaceSessionMapper
         long proxyNodeId,
         long userId,
         CharacterSummary character,
-        SolarSystemEntityState entity)
+        SolarSystemEntityState entity,
+        IReadOnlyList<SolarSystemStaticObjectState> staticObjects,
+        DateTimeOffset observedAt)
     {
         ValidateOwnShip(character, entity);
+        ValidateStaticObjects(character, entity, staticObjects);
         uint stamp = ToStamp(entity.Tick);
+        PyValue[] slims =
+        [
+            CreateOwnShipSlim(character),
+            .. staticObjects
+                .OrderBy(item => item.EntityId)
+                .Select(CreateStaticObjectSlim),
+        ];
         PyValue state = new PyObject(
             new PyBuffer("utillib.KeyVal"u8),
             Dictionary(
-                ("damageState", new PyDictionary()),
+                ("damageState", new PyDictionary(new PyDictionaryEntry(
+                    new PyInteger(entity.ShipId),
+                    CreateFullDamageState(observedAt)))),
                 ("stamp", new PyInteger(stamp)),
                 ("researchLevel", new PyInteger(0)),
                 ("effectStates", new PyList()),
                 ("industryLevel", new PyInteger(0)),
-                ("state", new PyBuffer(CreateStoppedBallState(stamp, entity))),
+                ("state", new PyBuffer(CreateBallState(stamp, entity, staticObjects))),
                 ("ego", new PyInteger(entity.ShipId)),
-                ("slims", new PyList(CreateOwnShipSlim(character))),
+                ("slims", new PyList(slims)),
                 ("droneState", new PyList()),
                 ("dbuffState", new PyList()),
-                ("solItem", PyNull.Instance)));
+                ("aggressors", new PyDictionary()),
+                ("allianceBridges", new PyList()),
+                ("solItem", Build3396210InventoryMapper.CreateSolarSystem(character))));
 
         return CreateDestinyUpdate(
             proxyNodeId,
@@ -158,13 +172,59 @@ internal static class Build3396210SpaceSessionMapper
                 ("nameID", PyNull.Instance),
                 ("name", new PyText(character.ShipName))));
 
-    private static byte[] CreateStoppedBallState(
-        uint stamp,
-        SolarSystemEntityState entity)
+    private static PyObject CreateStaticObjectSlim(SolarSystemStaticObjectState item)
     {
-        var writer = new ArrayBufferWriter<byte>(44);
+        (int groupId, int categoryId) = item.Kind switch
+        {
+            SolarSystemStaticObjectKind.Station => (15, 3),
+            SolarSystemStaticObjectKind.Planet => (7, 2),
+            SolarSystemStaticObjectKind.JumpGate => (10, 2),
+            _ => throw new InvalidDataException(
+                $"Static object {item.EntityId} has unsupported kind {item.Kind}."),
+        };
+        return new PyObject(
+            new PyBuffer("eve.common.script.util.slimItem.SlimItem"u8),
+            Dictionary(
+                ("itemID", new PyInteger(item.EntityId)),
+                ("typeID", new PyInteger(item.TypeId)),
+                ("groupID", new PyInteger(groupId)),
+                ("categoryID", new PyInteger(categoryId)),
+                ("ownerID", new PyInteger(item.OwnerId)),
+                ("nameID", PyNull.Instance),
+                ("name", new PyText(item.Name))));
+    }
+
+    private static PyList CreateFullDamageState(DateTimeOffset observedAt)
+        => new(
+            new PyTuple(
+                new PyFloat(1),
+                new PyFloat(0),
+                new PyBigInteger(observedAt.UtcDateTime.ToFileTimeUtc())),
+            new PyFloat(1),
+            new PyFloat(1));
+
+    private static byte[] CreateBallState(
+        uint stamp,
+        SolarSystemEntityState entity,
+        IReadOnlyList<SolarSystemStaticObjectState> staticObjects)
+    {
+        var writer = new ArrayBufferWriter<byte>(
+            5 + (39 * checked(staticObjects.Count + 1)));
         WriteByte(writer, 0);
         WriteUInt32(writer, stamp);
+        WriteOwnShipBall(writer, entity);
+        foreach (SolarSystemStaticObjectState item in staticObjects.OrderBy(item => item.EntityId))
+        {
+            WriteStaticObjectBall(writer, item);
+        }
+
+        return writer.WrittenSpan.ToArray();
+    }
+
+    private static void WriteOwnShipBall(
+        IBufferWriter<byte> writer,
+        SolarSystemEntityState entity)
+    {
         WriteInt64(writer, entity.ShipId);
         WriteByte(writer, 2);
         WriteSingle(writer, StarterShipRadius);
@@ -173,7 +233,20 @@ internal static class Build3396210SpaceSessionMapper
         WriteDouble(writer, entity.PositionZ);
         WriteByte(writer, 0);
         WriteByte(writer, byte.MaxValue);
-        return writer.WrittenSpan.ToArray();
+    }
+
+    private static void WriteStaticObjectBall(
+        IBufferWriter<byte> writer,
+        SolarSystemStaticObjectState item)
+    {
+        WriteInt64(writer, item.EntityId);
+        WriteByte(writer, 11);
+        WriteSingle(writer, checked((float)item.Radius));
+        WriteDouble(writer, item.PositionX);
+        WriteDouble(writer, item.PositionY);
+        WriteDouble(writer, item.PositionZ);
+        WriteByte(writer, 6);
+        WriteByte(writer, byte.MaxValue);
     }
 
     private static void ValidateOwnShip(
@@ -194,6 +267,32 @@ internal static class Build3396210SpaceSessionMapper
         {
             throw new InvalidDataException(
                 $"Ship type {character.ShipTypeId} has no build-3396210 presentation profile.");
+        }
+    }
+
+    private static void ValidateStaticObjects(
+        CharacterSummary character,
+        SolarSystemEntityState entity,
+        IReadOnlyList<SolarSystemStaticObjectState> staticObjects)
+    {
+        ArgumentNullException.ThrowIfNull(staticObjects);
+        if (staticObjects.Any(item =>
+                item.EntityId <= 0
+                || item.EntityId == entity.ShipId
+                || item.TypeId <= 0
+                || item.OwnerId <= 0
+                || item.SolarSystemId != character.SolarSystemId
+                || string.IsNullOrWhiteSpace(item.Name)
+                || !double.IsFinite(item.PositionX)
+                || !double.IsFinite(item.PositionY)
+                || !double.IsFinite(item.PositionZ)
+                || !double.IsFinite(item.Radius)
+                || item.Radius <= 0)
+            || staticObjects.Select(item => item.EntityId).Distinct().Count()
+                != staticObjects.Count)
+        {
+            throw new InvalidDataException(
+                "The initial solar-system snapshot contains invalid authored objects.");
         }
     }
 

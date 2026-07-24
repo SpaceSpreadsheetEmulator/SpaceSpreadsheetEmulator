@@ -100,6 +100,13 @@ message CharacterSummary {
   int32 character_group_id = 29;
   int32 character_category_id = 30;
   repeated CharacterInventoryItem inventory_items = 31;
+  repeated DogmaAttributeValue ship_dogma_attributes = 32;
+}
+
+// Carries one build-pinned base Dogma attribute without exposing a wire encoding.
+message DogmaAttributeValue {
+  int32 attribute_id = 1;
+  double value = 2;
 }
 
 // Describes one durable character-owned inventory stack.

@@ -131,5 +131,6 @@ public sealed partial class GrpcSolarSystemBackend
             state.Position.Y,
             state.Position.Z,
             state.Radius,
-            state.HasDestinationSolarSystemId ? state.DestinationSolarSystemId : null);
+            state.HasDestinationSolarSystemId ? state.DestinationSolarSystemId : null,
+            state.OwnerId);
 }

@@ -140,7 +140,8 @@ internal sealed class SolarSystemRuntimeInitializer(
                 solarSystemId,
                 new SolarVector3(configured.X, configured.Y, configured.Z),
                 radius,
-                configured.DestinationSolarSystemId));
+                configured.DestinationSolarSystemId,
+                configured.OwnerId));
         }
 
         return objects;
