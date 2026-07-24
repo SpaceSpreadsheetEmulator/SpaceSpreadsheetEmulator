@@ -73,7 +73,10 @@ corpus is present.
 The `sse-data` tool promotes a verified build-specific JSONL archive into a
 hash-addressed SQLite artifact. The archive, resulting database, local certificates,
 and end-to-end evidence stay below gitignored `_local` paths. Worker rejects an
-artifact unless its client, protocol, and SDE builds all equal `3396210`.
+artifact unless its client, protocol, and SDE builds all equal `3396210`. Schema 5
+adds typed inventory definitions, Dogma attribute/effect definitions, and per-type
+Dogma values. Runtime code can preload selected profiles through
+`IDogmaDefinitionCatalog`, avoiding SQLite access in simulation ticks.
 
 ## Configuration profiles
 

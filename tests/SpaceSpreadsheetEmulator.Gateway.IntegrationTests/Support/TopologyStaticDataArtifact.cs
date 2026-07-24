@@ -36,6 +36,9 @@ internal sealed class TopologyStaticDataArtifact : IAsyncDisposable
             Write(archive, "mapRegions.jsonl", "{\"_key\":10000033,\"name\":{\"en\":\"The Forge\"},\"factionID\":500001}");
             Write(archive, "mapConstellations.jsonl", "{\"_key\":20000407,\"name\":{\"en\":\"Kimotoro\"},\"regionID\":10000033}");
             Write(archive, "mapSolarSystems.jsonl", "{\"_key\":30002780,\"name\":{\"en\":\"New Caldari\"},\"constellationID\":20000407,\"regionID\":10000033}");
+            Write(archive, "dogmaAttributes.jsonl", "{\"_key\":37,\"attributeCategoryID\":17,\"dataType\":4,\"defaultValue\":0,\"description\":\"Maximum velocity\",\"displayName\":{\"en\":\"Maximum Velocity\"},\"displayWhenZero\":false,\"highIsGood\":true,\"name\":\"maxVelocity\",\"published\":true,\"stackable\":false,\"unitID\":11}");
+            Write(archive, "dogmaEffects.jsonl", "{\"_key\":5000,\"disallowAutoRepeat\":false,\"effectCategoryID\":0,\"guid\":\"effects.shipMaxTargetRangeBonusOnline\",\"isAssistance\":false,\"isOffensive\":false,\"isWarpSafe\":true,\"name\":\"shipMaxTargetRangeBonusOnline\",\"published\":false}");
+            Write(archive, "typeDogma.jsonl", "{\"_key\":601,\"dogmaAttributes\":[{\"attributeID\":37,\"value\":295}],\"dogmaEffects\":[{\"effectID\":5000,\"isDefault\":false}]}");
         }
 
         string hash = await StaticDataPromoter.ComputeSha256Async(archivePath);

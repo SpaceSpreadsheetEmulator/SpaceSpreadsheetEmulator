@@ -13,7 +13,7 @@ public class StaticDataPromotionTests
         ("bloodlines.jsonl", "{\"_key\":2,\"name\":{\"en\":\"Test Bloodline\"},\"raceID\":1,\"corporationID\":6}"),
         ("ancestries.jsonl", "{\"_key\":3,\"name\":{\"en\":\"Test Ancestry\"},\"bloodlineID\":2}"),
         ("factions.jsonl", "{\"_key\":4,\"name\":{\"en\":\"Test Faction\"},\"corporationID\":6}"),
-        ("types.jsonl", "{\"_key\":5,\"name\":{\"en\":\"Test Type\"},\"groupID\":50}"),
+        ("types.jsonl", "{\"_key\":5,\"name\":{\"en\":\"Test Type\"},\"description\":{\"en\":\"Test ship\"},\"groupID\":50,\"published\":true,\"mass\":1000,\"radius\":12,\"volume\":50,\"capacity\":25,\"portionSize\":1}"),
         ("groups.jsonl", "{\"_key\":50,\"name\":{\"en\":\"Test Group\"},\"categoryID\":6}"),
         ("npcCorporations.jsonl", "{\"_key\":6,\"name\":{\"en\":\"Test Corporation\"},\"stationID\":7}"),
         ("npcCharacters.jsonl", "{\"_key\":11,\"name\":{\"en\":\"Test Agent\"},\"agent\":{\"agentTypeID\":2,\"divisionID\":22,\"level\":3,\"isLocator\":true},\"locationID\":7,\"bloodlineID\":2,\"corporationID\":6,\"gender\":true}"),
@@ -21,6 +21,9 @@ public class StaticDataPromotionTests
         ("mapRegions.jsonl", "{\"_key\":8,\"name\":{\"en\":\"Test Region\"},\"factionID\":4}"),
         ("mapConstellations.jsonl", "{\"_key\":9,\"name\":{\"en\":\"Test Constellation\"},\"regionID\":8}"),
         ("mapSolarSystems.jsonl", "{\"_key\":10,\"name\":{\"en\":\"Test System\"},\"constellationID\":9,\"regionID\":8}"),
+        ("dogmaAttributes.jsonl", "{\"_key\":37,\"attributeCategoryID\":17,\"dataType\":4,\"defaultValue\":0,\"description\":\"Maximum velocity\",\"displayName\":{\"en\":\"Maximum Velocity\"},\"displayWhenZero\":false,\"highIsGood\":true,\"name\":\"maxVelocity\",\"published\":true,\"stackable\":false,\"unitID\":11}"),
+        ("dogmaEffects.jsonl", "{\"_key\":5000,\"disallowAutoRepeat\":false,\"effectCategoryID\":0,\"guid\":\"effects.shipMaxTargetRangeBonusOnline\",\"isAssistance\":false,\"isOffensive\":false,\"isWarpSafe\":true,\"name\":\"shipMaxTargetRangeBonusOnline\",\"published\":false}"),
+        ("typeDogma.jsonl", "{\"_key\":5,\"dogmaAttributes\":[{\"attributeID\":37,\"value\":295}],\"dogmaEffects\":[{\"effectID\":5000,\"isDefault\":false}]}"),
     ];
 
     [Fact]
@@ -39,6 +42,10 @@ public class StaticDataPromotionTests
         await using SqliteStaticDataStore store = await SqliteStaticDataStore.OpenAsync(artifact);
         StaticDataRecord? system = await store.FindAsync(StaticDataEntityKind.SolarSystem, 10);
         StaticDataRecord? station = await store.FindAsync(StaticDataEntityKind.NpcStation, 7);
+        StaticTypeDefinition? type = await store.FindTypeAsync(5);
+        DogmaAttributeDefinition attribute = Assert.Single(await store.ListDogmaAttributesAsync());
+        DogmaEffectDefinition effect = Assert.Single(await store.ListDogmaEffectsAsync());
+        TypeDogmaDefinition? typeDogma = await store.FindTypeDogmaAsync(5);
         StaticNpcAgent agent = Assert.Single(await store.ListNpcAgentsAsync());
 
         Assert.Equal(3396210, store.Compatibility.ProtocolProfile);
@@ -46,6 +53,11 @@ public class StaticDataPromotionTests
         Assert.Equal(9, system.ParentId);
         Assert.Equal(8, system.SecondaryParentId);
         Assert.Equal(26, station!.OperationId);
+        Assert.Equal("Test ship", type!.Description);
+        Assert.Equal(1000, type.Mass);
+        Assert.Equal("maxVelocity", attribute.Name);
+        Assert.Equal("shipMaxTargetRangeBonusOnline", effect.Name);
+        Assert.Equal(295, Assert.Single(typeDogma!.Attributes).Value);
         Assert.Equal(11, agent.AgentId);
         Assert.Equal(7, agent.StationId);
         Assert.True(agent.IsLocatorAgent);

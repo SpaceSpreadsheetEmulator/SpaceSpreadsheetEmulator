@@ -3,7 +3,10 @@ namespace SpaceSpreadsheetEmulator.StaticData;
 /// <summary>
 /// Provides read-only access to a verified, build-pinned static-data artifact.
 /// </summary>
-public interface IStaticDataStore : IAsyncDisposable
+public interface IStaticDataStore :
+    ITypeDefinitionQuery,
+    IDogmaStaticDataQuery,
+    IAsyncDisposable
 {
     CompatibilityManifest Compatibility { get; }
 

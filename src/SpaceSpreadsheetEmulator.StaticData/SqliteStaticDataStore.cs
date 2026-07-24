@@ -6,7 +6,7 @@ namespace SpaceSpreadsheetEmulator.StaticData;
 /// <summary>
 /// Reads static-data records from a hash-verified immutable SQLite artifact.
 /// </summary>
-public sealed class SqliteStaticDataStore : IStaticDataStore
+public sealed partial class SqliteStaticDataStore : IStaticDataStore
 {
     private readonly SqliteConnection connection;
 

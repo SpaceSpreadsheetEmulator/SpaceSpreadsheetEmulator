@@ -41,6 +41,9 @@ public sealed class StaticDataCatalogTests
         WriteEntry(archive, "mapRegions.jsonl", """{"_key":10000002,"name":"The Forge"}""");
         WriteEntry(archive, "mapConstellations.jsonl", """{"_key":20000020,"name":"Kimotoro"}""");
         WriteEntry(archive, "mapSolarSystems.jsonl", """{"_key":30000142,"name":"Jita"}""");
+        WriteEntry(archive, "dogmaAttributes.jsonl", """{"_key":37,"dataType":4,"defaultValue":0,"name":"maxVelocity","published":true,"stackable":false}""");
+        WriteEntry(archive, "dogmaEffects.jsonl", """{"_key":5000,"effectCategoryID":0,"guid":"effects.shipMaxTargetRangeBonusOnline","name":"shipMaxTargetRangeBonusOnline"}""");
+        WriteEntry(archive, "typeDogma.jsonl", """{"_key":34,"dogmaAttributes":[],"dogmaEffects":[]}""");
         return archivePath;
     }
 

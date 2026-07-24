@@ -5,6 +5,7 @@
     <Project Path="src/SpaceSpreadsheetEmulator.Backplane.Contracts/SpaceSpreadsheetEmulator.Backplane.Contracts.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Content/SpaceSpreadsheetEmulator.Content.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Coordinator/SpaceSpreadsheetEmulator.Coordinator.csproj" />
+    <Project Path="src/SpaceSpreadsheetEmulator.Dogma/SpaceSpreadsheetEmulator.Dogma.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Gateway/SpaceSpreadsheetEmulator.Gateway.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Gameplay/SpaceSpreadsheetEmulator.Gameplay.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
@@ -20,6 +21,7 @@
     <Project Path="tests/SpaceSpreadsheetEmulator.Architecture.Tests/SpaceSpreadsheetEmulator.Architecture.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Cluster.Tests/SpaceSpreadsheetEmulator.Cluster.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Coordinator.IntegrationTests/SpaceSpreadsheetEmulator.Coordinator.IntegrationTests.csproj" />
+    <Project Path="tests/SpaceSpreadsheetEmulator.Dogma.Tests/SpaceSpreadsheetEmulator.Dogma.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Gateway.IntegrationTests/SpaceSpreadsheetEmulator.Gateway.IntegrationTests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Inventory.Tests/SpaceSpreadsheetEmulator.Inventory.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Milestone2.Tests/SpaceSpreadsheetEmulator.Milestone2.Tests.csproj" />

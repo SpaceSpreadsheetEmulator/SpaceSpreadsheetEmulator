@@ -80,6 +80,8 @@ if (loginOptions.Enabled)
     StarterCharacterTemplate template = StarterCharacterTemplate.Default;
     await template.ValidateAsync(staticData);
     builder.Services.AddSingleton<IStaticDataStore>(staticData);
+    builder.Services.AddSingleton<ITypeDefinitionQuery>(staticData);
+    builder.Services.AddSingleton<IDogmaStaticDataQuery>(staticData);
     builder.Services.AddSingleton(template);
     builder.Services.AddSingleton<IAccountAuthenticator>(services =>
         new InMemoryAccountAuthenticator(

@@ -13,8 +13,8 @@ public sealed class StaticDataPromoter
 {
     public const string DatabaseFileName = "static-data.sqlite";
     public const string ManifestFileName = "compatibility-manifest.json";
-    public const int CurrentSchemaVersion = 4;
-    public const string CurrentImporterVersion = "1.3.0";
+    public const int CurrentSchemaVersion = 5;
+    public const string CurrentImporterVersion = "1.4.0";
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
 
     private static readonly ImportDefinition[] Imports =
@@ -105,11 +105,18 @@ public sealed class StaticDataPromoter
             Directory.Move(stageDirectory, finalDirectory);
             return finalDirectory;
         }
-        catch
+        catch (Exception error)
         {
             if (Directory.Exists(stageDirectory))
             {
                 Directory.Delete(stageDirectory, recursive: true);
+            }
+
+            if (error is SqliteException)
+            {
+                throw new InvalidDataException(
+                    "The SDE archive violates the static-data artifact schema.",
+                    error);
             }
 
             throw;
@@ -148,36 +155,7 @@ public sealed class StaticDataPromoter
     {
         await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadWriteCreate");
         await connection.OpenAsync(cancellationToken);
-        await using (SqliteCommand schema = connection.CreateCommand())
-        {
-            schema.CommandText = """
-                PRAGMA journal_mode = OFF;
-                PRAGMA synchronous = OFF;
-                CREATE TABLE records (
-                    kind INTEGER NOT NULL,
-                    id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    parent_id INTEGER NULL,
-                    secondary_parent_id INTEGER NULL,
-                    type_id INTEGER NULL,
-                    owner_id INTEGER NULL,
-                    operation_id INTEGER NULL,
-                    PRIMARY KEY (kind, id)
-                ) WITHOUT ROWID;
-                CREATE TABLE npc_agents (
-                    agent_id INTEGER NOT NULL PRIMARY KEY,
-                    agent_type_id INTEGER NOT NULL,
-                    division_id INTEGER NOT NULL,
-                    level INTEGER NOT NULL,
-                    station_id INTEGER NULL,
-                    bloodline_id INTEGER NULL,
-                    corporation_id INTEGER NULL,
-                    gender INTEGER NOT NULL,
-                    is_locator_agent INTEGER NOT NULL
-                ) WITHOUT ROWID;
-                """;
-            await schema.ExecuteNonQueryAsync(cancellationToken);
-        }
+        await StaticDataArtifactSchema.CreateAsync(connection, cancellationToken);
 
         await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         await using SqliteCommand insert = connection.CreateCommand();
@@ -231,6 +209,8 @@ public sealed class StaticDataPromoter
         }
 
         await ImportNpcAgentsAsync(archive, connection, transaction, cancellationToken);
+        await StaticTypeImporter.ImportAsync(archive, connection, transaction, cancellationToken);
+        await DogmaStaticDataImporter.ImportAsync(archive, connection, transaction, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await using SqliteCommand optimize = connection.CreateCommand();
         optimize.CommandText = "ANALYZE; VACUUM;";

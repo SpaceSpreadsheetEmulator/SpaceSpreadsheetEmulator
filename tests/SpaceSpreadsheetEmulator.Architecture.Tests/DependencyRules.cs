@@ -12,6 +12,7 @@ public class DependencyRules
             ["Backplane.Contracts"] = ["Primitives"],
             ["StaticData"] = ["Primitives"],
             ["Content"] = ["Primitives", "StaticData"],
+            ["Dogma"] = ["Primitives", "StaticData"],
             ["Identity"] = ["Primitives"],
             ["Inventory"] = ["Primitives"],
             ["Gameplay"] = ["Content", "Identity", "Primitives", "StaticData"],
