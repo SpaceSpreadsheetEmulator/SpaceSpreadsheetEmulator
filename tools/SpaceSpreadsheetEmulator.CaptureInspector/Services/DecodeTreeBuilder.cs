@@ -30,40 +30,40 @@ public static class DecodeTreeBuilder
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-            {
-                var children = new List<DecodeTreeNode>();
-                foreach (JsonProperty property in element.EnumerateObject())
                 {
-                    children.Add(await BuildNodeAsync(property.Name, property.Value, identifierResolution, resolver, cancellationToken));
-                }
-
-                return new DecodeTreeNode(name, $"object ({children.Count})", children);
-            }
-            case JsonValueKind.Array:
-            {
-                var children = new List<DecodeTreeNode>();
-                var index = 0;
-                foreach (JsonElement item in element.EnumerateArray())
-                {
-                    children.Add(await BuildNodeAsync($"[{index++}]", item, identifierResolution, resolver, cancellationToken));
-                }
-
-                return new DecodeTreeNode(name, $"list ({children.Count})", children);
-            }
-            case JsonValueKind.Number when element.TryGetInt64(out long identifier):
-            {
-                string value = identifier.ToString(CultureInfo.InvariantCulture);
-                if (identifierResolution.TryGetValue(name, out bool enabled) && enabled)
-                {
-                    string? resolved = await resolver.ResolveAsync(name, identifier, cancellationToken);
-                    if (resolved is not null)
+                    var children = new List<DecodeTreeNode>();
+                    foreach (JsonProperty property in element.EnumerateObject())
                     {
-                        value = $"{value} — {resolved}";
+                        children.Add(await BuildNodeAsync(property.Name, property.Value, identifierResolution, resolver, cancellationToken));
                     }
-                }
 
-                return new DecodeTreeNode(name, value, []);
-            }
+                    return new DecodeTreeNode(name, $"object ({children.Count})", children);
+                }
+            case JsonValueKind.Array:
+                {
+                    var children = new List<DecodeTreeNode>();
+                    var index = 0;
+                    foreach (JsonElement item in element.EnumerateArray())
+                    {
+                        children.Add(await BuildNodeAsync($"[{index++}]", item, identifierResolution, resolver, cancellationToken));
+                    }
+
+                    return new DecodeTreeNode(name, $"list ({children.Count})", children);
+                }
+            case JsonValueKind.Number when element.TryGetInt64(out long identifier):
+                {
+                    string value = identifier.ToString(CultureInfo.InvariantCulture);
+                    if (identifierResolution.TryGetValue(name, out bool enabled) && enabled)
+                    {
+                        string? resolved = await resolver.ResolveAsync(name, identifier, cancellationToken);
+                        if (resolved is not null)
+                        {
+                            value = $"{value} — {resolved}";
+                        }
+                    }
+
+                    return new DecodeTreeNode(name, value, []);
+                }
             case JsonValueKind.String:
                 return new DecodeTreeNode(name, element.GetString() ?? string.Empty, []);
             case JsonValueKind.True:

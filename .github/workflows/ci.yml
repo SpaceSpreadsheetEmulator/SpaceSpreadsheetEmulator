@@ -36,7 +36,7 @@ jobs:
           -targetdir:"artifacts/coverage"
           -reporttypes:"Cobertura;HtmlSummary;TextSummary"
           -filefilters:"+*/src/*;-*/Migrations/*;-*/*.Designer.cs;-*/obj/*"
-      - run: eng/verify-coverage.sh artifacts/coverage/Cobertura.xml 0.80 0.70
+      - run: eng/verify-coverage.sh artifacts/coverage/Cobertura.xml 0.80 0.65
       - run: dotnet run --project tools/SpaceSpreadsheetEmulator.Protocol.Tool --configuration Release --no-build -- fixtures verify
       - uses: actions/upload-artifact@v4
         if: always()

@@ -107,5 +107,4 @@ specifications. Record uncertainty rather than filling gaps from a reference ser
   `git diff --check`, plus narrower tests appropriate to the change.
 - Do not commit or push unless requested. When committing, verify the staged file
   list contains no plan, capture, credential, certificate, key, or research corpus.
-- When pushing, use the repository's configured Git remote with `git push`; do not
-  require or use the GitHub CLI (`gh`).
+- When pushing, use the repository's configured Git remote with `git push`.

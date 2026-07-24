@@ -116,28 +116,28 @@ internal static class PyValueWalker
 
                 break;
             case PySubstream substream:
-            {
-                var inner = BlueMarshalCodec.Decode(
-                    new ReadOnlySequence<byte>(substream.Data.AsMemory()),
-                    Profile);
-                if (!inner.IsSuccess)
                 {
+                    var inner = BlueMarshalCodec.Decode(
+                        new ReadOnlySequence<byte>(substream.Data.AsMemory()),
+                        Profile);
+                    if (!inner.IsSuccess)
+                    {
+                        break;
+                    }
+
+                    long dataOffset = streamBaseOffset;
+                    if (substream.WireForm is { } wireForm)
+                    {
+                        dataOffset += wireForm.ByteOffset + wireForm.Bytes.Length - substream.Data.Length;
+                    }
+
+                    foreach (ValueOccurrence occurrence in EnumerateCore(inner.Value!, dataOffset, depth + 1))
+                    {
+                        yield return occurrence;
+                    }
+
                     break;
                 }
-
-                long dataOffset = streamBaseOffset;
-                if (substream.WireForm is { } wireForm)
-                {
-                    dataOffset += wireForm.ByteOffset + wireForm.Bytes.Length - substream.Data.Length;
-                }
-
-                foreach (ValueOccurrence occurrence in EnumerateCore(inner.Value!, dataOffset, depth + 1))
-                {
-                    yield return occurrence;
-                }
-
-                break;
-            }
             case PyPackedRow row:
                 foreach (PyValue variable in row.VariableValues)
                 {
