@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Security.Cryptography;
 using System.Text.Json;
 using SpaceSpreadsheetEmulator.Gateway.Compatibility;
@@ -14,17 +15,18 @@ public sealed class CapturedStartupReplayTests
     [InlineData("name:config.BulkData.races")]
     public void DuplicateRequestKeysAreRejected(string? match)
     {
-        string directory = Path.Combine(
-            Path.GetTempPath(),
+        IFileSystem fileSystem = new FileSystem();
+        string directory = fileSystem.Path.Combine(
+            fileSystem.Path.GetTempPath(),
             $"sse-replay-keys-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(directory);
+        fileSystem.Directory.CreateDirectory(directory);
         try
         {
             ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
             byte[] value = BlueMarshalCodec.Encode(new PyList(), profile);
             string hash = Convert.ToHexStringLower(SHA256.HashData(value));
-            File.WriteAllBytes(Path.Combine(directory, "first.marshal"), value);
-            File.WriteAllBytes(Path.Combine(directory, "second.marshal"), value);
+            fileSystem.File.WriteAllBytes(fileSystem.Path.Combine(directory, "first.marshal"), value);
+            fileSystem.File.WriteAllBytes(fileSystem.Path.Combine(directory, "second.marshal"), value);
             string manifest = JsonSerializer.Serialize(new
             {
                 formatVersion = 1,
@@ -48,13 +50,13 @@ public sealed class CapturedStartupReplayTests
                     },
                 },
             });
-            File.WriteAllText(Path.Combine(directory, "manifest.json"), manifest);
+            fileSystem.File.WriteAllText(fileSystem.Path.Combine(directory, "manifest.json"), manifest);
 
             InvalidDataException error = Assert.Throws<InvalidDataException>(
                 () => _ = new Build3396210StartupProfile(new GatewayCompatibilityOptions
                 {
                     CapturedStartupDataDirectory = directory,
-                }));
+                }, fileSystem));
 
             Assert.Contains(
                 match is null ? "unkeyed" : "duplicate request key",
@@ -63,7 +65,7 @@ public sealed class CapturedStartupReplayTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            fileSystem.Directory.Delete(directory, recursive: true);
         }
     }
 }

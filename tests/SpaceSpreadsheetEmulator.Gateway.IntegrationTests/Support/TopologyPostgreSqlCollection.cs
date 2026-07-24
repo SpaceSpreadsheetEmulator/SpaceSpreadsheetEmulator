@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SpaceSpreadsheetEmulator.Persistence;
@@ -16,6 +17,7 @@ public sealed class TopologyPostgreSqlCollection : ICollectionFixture<TopologyPo
 public sealed class TopologyPostgreSqlFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer container = TestContainerSettings.Configure(
+            new FileSystem(),
             new PostgreSqlBuilder("postgres:18.4-trixie"))
         .WithDatabase("space_spreadsheet_emulator_topology_tests")
         .WithUsername("sse_topology_tests")

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.IO.Abstractions;
 using System.Globalization;
 using System.Text.Json;
 using SpaceSpreadsheetEmulator.CaptureInspector.Models;
@@ -24,13 +25,22 @@ public sealed class StaticDataCatalog : IIdentifierResolver, IAsyncDisposable
         };
 
     private readonly string cacheDirectory;
+    private readonly IFileSystem fileSystem;
+    private readonly StaticDataPromoter promoter;
     private readonly Dictionary<(StaticDataEntityKind Kind, long Id), string?> lookupCache = [];
     private SqliteStaticDataStore? store;
 
-    public StaticDataCatalog(string cacheDirectory)
+    public StaticDataCatalog(
+        IFileSystem fileSystem,
+        string cacheDirectory,
+        TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheDirectory);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        this.fileSystem = fileSystem;
         this.cacheDirectory = cacheDirectory;
+        promoter = new StaticDataPromoter(fileSystem, timeProvider);
     }
 
     public CompatibilityManifest? Compatibility => store?.Compatibility;
@@ -39,11 +49,22 @@ public sealed class StaticDataCatalog : IIdentifierResolver, IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
         int build = await ReadBuildAsync(archivePath, cancellationToken);
-        string sourceHash = await StaticDataPromoter.ComputeSha256Async(archivePath, cancellationToken);
+        string sourceHash = await StaticDataPromoter.ComputeSha256Async(
+            fileSystem,
+            archivePath,
+            cancellationToken);
         string? artifactDirectory = await FindCachedArtifactAsync(build, sourceHash, cancellationToken);
-        artifactDirectory ??= await StaticDataPromoter.PromoteAsync(archivePath, cacheDirectory, build, sourceHash, cancellationToken);
+        artifactDirectory ??= await promoter.PromoteAsync(
+            archivePath,
+            cacheDirectory,
+            build,
+            sourceHash,
+            cancellationToken);
 
-        SqliteStaticDataStore nextStore = await SqliteStaticDataStore.OpenAsync(artifactDirectory, cancellationToken);
+        SqliteStaticDataStore nextStore = await SqliteStaticDataStore.OpenAsync(
+            fileSystem,
+            artifactDirectory,
+            cancellationToken);
         SqliteStaticDataStore? previousStore = Interlocked.Exchange(ref store, nextStore);
         lookupCache.Clear();
         if (previousStore is not null)
@@ -85,9 +106,9 @@ public sealed class StaticDataCatalog : IIdentifierResolver, IAsyncDisposable
         await ClearAsync();
     }
 
-    private static async Task<int> ReadBuildAsync(string archivePath, CancellationToken cancellationToken)
+    private async Task<int> ReadBuildAsync(string archivePath, CancellationToken cancellationToken)
     {
-        await using var stream = File.OpenRead(archivePath);
+        await using Stream stream = fileSystem.File.OpenRead(archivePath);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
         ZipArchiveEntry entry = archive.GetEntry("_sde.jsonl")
             ?? throw new InvalidDataException("The selected archive has no _sde.jsonl metadata entry.");
@@ -98,21 +119,21 @@ public sealed class StaticDataCatalog : IIdentifierResolver, IAsyncDisposable
 
     private async Task<string?> FindCachedArtifactAsync(int build, string sourceHash, CancellationToken cancellationToken)
     {
-        string buildDirectory = Path.Combine(cacheDirectory, build.ToString(CultureInfo.InvariantCulture));
-        if (!Directory.Exists(buildDirectory))
+        string buildDirectory = fileSystem.Path.Combine(cacheDirectory, build.ToString(CultureInfo.InvariantCulture));
+        if (!fileSystem.Directory.Exists(buildDirectory))
         {
             return null;
         }
 
-        foreach (string candidate in Directory.EnumerateDirectories(buildDirectory))
+        foreach (string candidate in fileSystem.Directory.EnumerateDirectories(buildDirectory))
         {
-            string manifestPath = Path.Combine(candidate, StaticDataPromoter.ManifestFileName);
-            if (!File.Exists(manifestPath))
+            string manifestPath = fileSystem.Path.Combine(candidate, StaticDataPromoter.ManifestFileName);
+            if (!fileSystem.File.Exists(manifestPath))
             {
                 continue;
             }
 
-            await using FileStream manifest = File.OpenRead(manifestPath);
+            await using Stream manifest = fileSystem.File.OpenRead(manifestPath);
             CompatibilityManifest? compatibility = await JsonSerializer.DeserializeAsync<CompatibilityManifest>(manifest, cancellationToken: cancellationToken);
             if (compatibility is not null && string.Equals(compatibility.SourceSha256, sourceHash, StringComparison.OrdinalIgnoreCase))
             {

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
 using SpaceSpreadsheetEmulator.Protocol.Profiles;
 using SpaceSpreadsheetEmulator.Protocol.Values;
@@ -10,21 +11,26 @@ namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 /// </summary>
 public static class CommandLine
 {
-    public static int Run(string[] arguments, TextWriter output, TextWriter error)
+    public static int Run(
+        string[] arguments,
+        TextWriter output,
+        TextWriter error,
+        IFileSystem fileSystem)
     {
+        ArgumentNullException.ThrowIfNull(fileSystem);
         try
         {
             if (arguments is ["fixtures", "verify", ..])
             {
-                string root = arguments.Length >= 3 ? arguments[2] : FindFixtureRoot();
-                return FixtureVerifier.Verify(root);
+                string root = arguments.Length >= 3 ? arguments[2] : FindFixtureRoot(fileSystem);
+                return FixtureVerifier.Verify(fileSystem, root);
             }
 
             ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(ReadProfile(arguments));
             if (arguments is ["decode", var decodeInput, ..])
             {
                 DecodeResult<PyValue> result = BlueMarshalCodec.Decode(
-                    new ReadOnlySequence<byte>(HexFiles.Read(decodeInput)), profile);
+                    new ReadOnlySequence<byte>(HexFiles.Read(fileSystem, decodeInput)), profile);
                 if (!result.IsSuccess)
                 {
                     error.WriteLine(System.Text.Json.JsonSerializer.Serialize(result.Error));
@@ -37,15 +43,15 @@ public static class CommandLine
 
             if (arguments is ["encode", var encodeInput, ..])
             {
-                PyValue value = ValueJson.Deserialize(File.ReadAllText(encodeInput));
+                PyValue value = ValueJson.Deserialize(fileSystem.File.ReadAllText(encodeInput));
                 output.WriteLine(HexFiles.Format(BlueMarshalCodec.Encode(value, profile)));
                 return 0;
             }
 
             if (arguments is ["diff", var leftPath, var rightPath, ..])
             {
-                byte[] left = HexFiles.Read(leftPath);
-                byte[] right = HexFiles.Read(rightPath);
+                byte[] left = HexFiles.Read(fileSystem, leftPath);
+                byte[] right = HexFiles.Read(fileSystem, rightPath);
                 bool semantic = arguments.Contains("--semantic", StringComparer.Ordinal);
                 bool equal = semantic
                     ? SemanticEqual(left, right, profile)
@@ -80,14 +86,14 @@ public static class CommandLine
             : ProtocolProfileCatalog.SupportedBuild;
     }
 
-    private static string FindFixtureRoot()
+    private static string FindFixtureRoot(IFileSystem fileSystem)
     {
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        for (IDirectoryInfo? directory = fileSystem.DirectoryInfo.New(AppContext.BaseDirectory);
              directory is not null;
              directory = directory.Parent)
         {
-            string candidate = Path.Combine(directory.FullName, "fixtures", "protocol", "3396210");
-            if (Directory.Exists(candidate))
+            string candidate = fileSystem.Path.Combine(directory.FullName, "fixtures", "protocol", "3396210");
+            if (fileSystem.Directory.Exists(candidate))
             {
                 return candidate;
             }

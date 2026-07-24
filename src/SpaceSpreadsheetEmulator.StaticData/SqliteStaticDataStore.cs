@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.IO.Abstractions;
 using Microsoft.Data.Sqlite;
 
 namespace SpaceSpreadsheetEmulator.StaticData;
@@ -19,19 +20,24 @@ public sealed partial class SqliteStaticDataStore : IStaticDataStore
     public CompatibilityManifest Compatibility { get; }
 
     public static async Task<SqliteStaticDataStore> OpenAsync(
+        IFileSystem fileSystem,
         string artifactDirectory,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentException.ThrowIfNullOrWhiteSpace(artifactDirectory);
-        string manifestPath = Path.Combine(artifactDirectory, StaticDataPromoter.ManifestFileName);
-        string databasePath = Path.Combine(artifactDirectory, StaticDataPromoter.DatabaseFileName);
-        await using FileStream manifestStream = File.OpenRead(manifestPath);
+        string manifestPath = fileSystem.Path.Combine(artifactDirectory, StaticDataPromoter.ManifestFileName);
+        string databasePath = fileSystem.Path.Combine(artifactDirectory, StaticDataPromoter.DatabaseFileName);
+        await using Stream manifestStream = fileSystem.File.OpenRead(manifestPath);
         CompatibilityManifest manifest = await JsonSerializer.DeserializeAsync<CompatibilityManifest>(
             manifestStream,
             cancellationToken: cancellationToken)
             ?? throw new InvalidDataException("The static-data compatibility manifest is empty.");
 
-        string actualHash = await StaticDataPromoter.ComputeSha256Async(databasePath, cancellationToken);
+        string actualHash = await StaticDataPromoter.ComputeSha256Async(
+            fileSystem,
+            databasePath,
+            cancellationToken);
         if (!string.Equals(actualHash, manifest.ArtifactSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException("The static-data artifact hash does not match its compatibility manifest.");

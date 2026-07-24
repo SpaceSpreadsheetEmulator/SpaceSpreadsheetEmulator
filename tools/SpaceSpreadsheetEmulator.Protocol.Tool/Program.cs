@@ -1,3 +1,5 @@
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Protocol.Tool;
 
-return CommandLine.Run(args, Console.Out, Console.Error);
+IFileSystem fileSystem = new FileSystem();
+return CommandLine.Run(args, Console.Out, Console.Error, fileSystem);

@@ -1,9 +1,12 @@
+using System.IO.Abstractions;
 using System.Xml.Linq;
 
 namespace SpaceSpreadsheetEmulator.Architecture.Tests;
 
 public class DependencyRules
 {
+    private readonly IFileSystem fileSystem = new FileSystem();
+
     private static readonly IReadOnlyDictionary<string, string[]> AllowedReferences =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
@@ -35,13 +38,14 @@ public class DependencyRules
 
         foreach (string projectName in dependencyFreeProjects)
         {
-            string projectFile = Path.Combine(
+            string projectFile = fileSystem.Path.Combine(
                 repositoryRoot,
                 "src",
                 $"SpaceSpreadsheetEmulator.{projectName}",
                 $"SpaceSpreadsheetEmulator.{projectName}.csproj");
 
-            XDocument project = XDocument.Load(projectFile);
+            using Stream projectStream = fileSystem.File.OpenRead(projectFile);
+            XDocument project = XDocument.Load(projectStream);
 
             Assert.Empty(project.Descendants("ProjectReference"));
         }
@@ -53,14 +57,15 @@ public class DependencyRules
         string repositoryRoot = FindRepositoryRoot();
         foreach ((string projectName, string[] expected) in AllowedReferences)
         {
-            string projectFile = Path.Combine(
+            string projectFile = fileSystem.Path.Combine(
                 repositoryRoot,
                 "src",
                 $"SpaceSpreadsheetEmulator.{projectName}",
                 $"SpaceSpreadsheetEmulator.{projectName}.csproj");
-            XDocument project = XDocument.Load(projectFile);
+            using Stream projectStream = fileSystem.File.OpenRead(projectFile);
+            XDocument project = XDocument.Load(projectStream);
             string[] actual = project.Descendants("ProjectReference")
-                .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")!.Value))
+                .Select(element => fileSystem.Path.GetFileNameWithoutExtension(element.Attribute("Include")!.Value))
                 .Select(name => name["SpaceSpreadsheetEmulator.".Length..])
                 .Order(StringComparer.Ordinal)
                 .ToArray();
@@ -74,16 +79,16 @@ public class DependencyRules
     {
         string repositoryRoot = FindRepositoryRoot();
         string[] hosts = ["Chat.Service", "Gateway", "Coordinator", "Worker"];
-        foreach (string projectFile in Directory.GetFiles(
-                     Path.Combine(repositoryRoot, "src"), "*.csproj", SearchOption.AllDirectories))
+        foreach (string projectFile in fileSystem.Directory.GetFiles(
+                     fileSystem.Path.Combine(repositoryRoot, "src"), "*.csproj", SearchOption.AllDirectories))
         {
-            string name = Path.GetFileNameWithoutExtension(projectFile);
+            string name = fileSystem.Path.GetFileNameWithoutExtension(projectFile);
             if (hosts.Any(host => name.EndsWith(host, StringComparison.Ordinal)))
             {
                 continue;
             }
 
-            string projectText = File.ReadAllText(projectFile);
+            string projectText = fileSystem.File.ReadAllText(projectFile);
             Assert.DoesNotContain(hosts, host => projectText.Contains(
                 $"SpaceSpreadsheetEmulator.{host}.csproj", StringComparison.Ordinal));
         }
@@ -93,10 +98,10 @@ public class DependencyRules
     public void ProjectFilesDoNotReferenceExternalEveImplementations()
     {
         string repositoryRoot = FindRepositoryRoot();
-        foreach (string projectFile in Directory.GetFiles(
+        foreach (string projectFile in fileSystem.Directory.GetFiles(
                      repositoryRoot, "*.csproj", SearchOption.AllDirectories))
         {
-            string content = File.ReadAllText(projectFile);
+            string content = fileSystem.File.ReadAllText(projectFile);
             Assert.DoesNotContain("dockers/eve-1", content, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("EVESharp", content, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("EvEJS", content, StringComparison.OrdinalIgnoreCase);
@@ -107,7 +112,7 @@ public class DependencyRules
     public void SolarSystemBackplaneUsesIntentCommandsAndStreamedOutput()
     {
         string repositoryRoot = FindRepositoryRoot();
-        string contract = File.ReadAllText(Path.Combine(
+        string contract = fileSystem.File.ReadAllText(fileSystem.Path.Combine(
             repositoryRoot,
             "src",
             "SpaceSpreadsheetEmulator.Backplane.Contracts",
@@ -136,7 +141,7 @@ public class DependencyRules
         Assert.DoesNotContain("rpc SetShipPosition ", contract, StringComparison.Ordinal);
         Assert.DoesNotContain("rpc SetDockedState ", contract, StringComparison.Ordinal);
 
-        string loginContract = File.ReadAllText(Path.Combine(
+        string loginContract = fileSystem.File.ReadAllText(fileSystem.Path.Combine(
             repositoryRoot,
             "src",
             "SpaceSpreadsheetEmulator.Backplane.Contracts",
@@ -155,7 +160,7 @@ public class DependencyRules
             loginContract,
             StringComparison.Ordinal);
 
-        string chatContract = File.ReadAllText(Path.Combine(
+        string chatContract = fileSystem.File.ReadAllText(fileSystem.Path.Combine(
             repositoryRoot,
             "src",
             "SpaceSpreadsheetEmulator.Backplane.Contracts",
@@ -173,13 +178,13 @@ public class DependencyRules
         Assert.Contains("LocalChatMessage message_posted = 6;", chatContract, StringComparison.Ordinal);
     }
 
-    private static string FindRepositoryRoot()
+    private string FindRepositoryRoot()
     {
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        for (IDirectoryInfo? directory = fileSystem.DirectoryInfo.New(AppContext.BaseDirectory);
              directory is not null;
              directory = directory.Parent)
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, ".git")))
+            if (fileSystem.Directory.Exists(fileSystem.Path.Combine(directory.FullName, ".git")))
             {
                 return directory.FullName;
             }

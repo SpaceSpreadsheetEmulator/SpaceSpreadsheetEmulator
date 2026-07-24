@@ -22,6 +22,7 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="Tmds.DBus.Protocol" />
+    <PackageReference Include="TestableIO.System.IO.Abstractions.Wrappers" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Protocol/SpaceSpreadsheetEmulator.Protocol.csproj" />

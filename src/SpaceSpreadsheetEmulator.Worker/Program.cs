@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Content.Characters;
 using SpaceSpreadsheetEmulator.Dogma.Definitions;
 using SpaceSpreadsheetEmulator.Dogma.Movement;
@@ -15,6 +16,8 @@ using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
 
 var builder = WebApplication.CreateBuilder(args);
+IFileSystem fileSystem = new FileSystem();
+builder.Services.AddSingleton(fileSystem);
 builder.Configuration.AddJsonFile(
     $"appsettings.{builder.Environment.EnvironmentName}.local.json",
     optional: true,
@@ -70,7 +73,9 @@ if (loginOptions.Enabled)
 
 if (loginOptions.Enabled)
 {
-    SqliteStaticDataStore staticData = await SqliteStaticDataStore.OpenAsync(loginOptions.ArtifactDirectory);
+    SqliteStaticDataStore staticData = await SqliteStaticDataStore.OpenAsync(
+        fileSystem,
+        loginOptions.ArtifactDirectory);
     if (staticData.Compatibility is not { ClientBuild: 3_396_210, ProtocolProfile: 3_396_210, SdeBuild: 3_396_210 })
     {
         await staticData.DisposeAsync();

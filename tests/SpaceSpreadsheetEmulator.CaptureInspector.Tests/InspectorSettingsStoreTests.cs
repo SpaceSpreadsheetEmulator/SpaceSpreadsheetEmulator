@@ -1,14 +1,17 @@
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.CaptureInspector.Services;
 
 namespace SpaceSpreadsheetEmulator.CaptureInspector.Tests;
 
 public sealed class InspectorSettingsStoreTests
 {
+    private static readonly IFileSystem FileSystem = new FileSystem();
+
     [Fact]
     public void SaveAndLoadRoundTripsPathsAndIdentifierSettings()
     {
-        using var directory = TemporaryDirectory.Create();
-        var store = new InspectorSettingsStore(directory.Path);
+        using var directory = TemporaryDirectory.Create(FileSystem);
+        var store = new InspectorSettingsStore(FileSystem, directory.Path);
         var settings = store.Load();
         settings.CcpStaticDataArchivePath = "/data/sde.zip";
         settings.ClientExportLocation = "/data/client-export";
@@ -25,17 +28,25 @@ public sealed class InspectorSettingsStoreTests
 
     private sealed class TemporaryDirectory : IDisposable
     {
-        private TemporaryDirectory(string path) => Path = path;
+        private readonly IFileSystem fileSystem;
+
+        private TemporaryDirectory(IFileSystem fileSystem, string path)
+        {
+            this.fileSystem = fileSystem;
+            Path = path;
+        }
 
         public string Path { get; }
 
-        public static TemporaryDirectory Create()
+        public static TemporaryDirectory Create(IFileSystem fileSystem)
         {
-            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(path);
-            return new TemporaryDirectory(path);
+            string path = fileSystem.Path.Combine(
+                fileSystem.Path.GetTempPath(),
+                Guid.NewGuid().ToString("N"));
+            fileSystem.Directory.CreateDirectory(path);
+            return new TemporaryDirectory(fileSystem, path);
         }
 
-        public void Dispose() => Directory.Delete(Path, recursive: true);
+        public void Dispose() => fileSystem.Directory.Delete(Path, recursive: true);
     }
 }

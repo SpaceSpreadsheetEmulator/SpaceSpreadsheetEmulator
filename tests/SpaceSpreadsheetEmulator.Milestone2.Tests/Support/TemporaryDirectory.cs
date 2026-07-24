@@ -1,20 +1,28 @@
+using System.IO.Abstractions;
+
 namespace SpaceSpreadsheetEmulator.Milestone2.Tests.Support;
 
 internal sealed class TemporaryDirectory : IDisposable
 {
-    public TemporaryDirectory()
+    private readonly IFileSystem fileSystem;
+
+    public TemporaryDirectory(IFileSystem fileSystem)
     {
-        Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"sse-m2-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path);
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        this.fileSystem = fileSystem;
+        Path = fileSystem.Path.Combine(
+            fileSystem.Path.GetTempPath(),
+            $"sse-m2-{Guid.NewGuid():N}");
+        fileSystem.Directory.CreateDirectory(Path);
     }
 
     public string Path { get; }
 
     public void Dispose()
     {
-        if (Directory.Exists(Path))
+        if (fileSystem.Directory.Exists(Path))
         {
-            Directory.Delete(Path, recursive: true);
+            fileSystem.Directory.Delete(Path, recursive: true);
         }
     }
 }

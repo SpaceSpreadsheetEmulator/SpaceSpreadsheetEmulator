@@ -1,23 +1,23 @@
+using System.IO.Abstractions;
 using System.Text.Json;
 
 namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 
 internal static class GatewayTestSettings
 {
-    public static bool RunConnectionSmoke { get; } = LoadRunConnectionSmoke();
-
-    private static bool LoadRunConnectionSmoke()
+    public static bool LoadRunConnectionSmoke(IFileSystem fileSystem)
     {
-        string localSettings = Path.Combine(
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        string localSettings = fileSystem.Path.Combine(
             AppContext.BaseDirectory,
             "appsettings.UnitTest.local.json");
-        string settingsPath = File.Exists(localSettings)
+        string settingsPath = fileSystem.File.Exists(localSettings)
             ? localSettings
-            : Path.Combine(AppContext.BaseDirectory, "appsettings.UnitTest.json");
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            : fileSystem.Path.Combine(AppContext.BaseDirectory, "appsettings.UnitTest.json");
+        using JsonDocument document = JsonDocument.Parse(fileSystem.File.ReadAllText(settingsPath));
         return document.RootElement
             .GetProperty("GatewayTests")
-            .GetProperty(nameof(RunConnectionSmoke))
+            .GetProperty("RunConnectionSmoke")
             .GetBoolean();
     }
 }

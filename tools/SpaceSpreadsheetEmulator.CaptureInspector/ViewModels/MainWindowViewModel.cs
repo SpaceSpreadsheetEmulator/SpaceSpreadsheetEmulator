@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO.Abstractions;
 using System.Text.Json;
 using SpaceSpreadsheetEmulator.CaptureInspector.Models;
 using SpaceSpreadsheetEmulator.CaptureInspector.Services;
@@ -12,6 +13,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private const int MaximumFrames = 100_000;
     private readonly StaticDataCatalog catalog;
     private readonly InspectorSettingsStore settingsStore;
+    private readonly CaptureFramesReader captureFramesReader;
+    private readonly IFileSystem fileSystem;
     private readonly PacketTreeBuilder packetTreeBuilder = new();
     private readonly FrameDecoder frameDecoder = new();
     private readonly List<CaptureFrame> allFrames = [];
@@ -37,19 +40,34 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private int? captureClientBuild;
 
     public MainWindowViewModel()
-        : this(
-            new StaticDataCatalog(InspectorApplicationPaths.CreateDefault().CacheDirectory),
-            new InspectorSettingsStore(InspectorApplicationPaths.CreateDefault().ConfigurationDirectory))
+        : this(CreateDefaultDependencies())
     {
     }
 
     public MainWindowViewModel(
         StaticDataCatalog catalog,
-        InspectorSettingsStore settingsStore)
+        InspectorSettingsStore settingsStore,
+        CaptureFramesReader captureFramesReader,
+        IFileSystem fileSystem)
     {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentNullException.ThrowIfNull(captureFramesReader);
+        ArgumentNullException.ThrowIfNull(fileSystem);
         this.catalog = catalog;
         this.settingsStore = settingsStore;
+        this.captureFramesReader = captureFramesReader;
+        this.fileSystem = fileSystem;
         Settings = settingsStore.Load();
+    }
+
+    private MainWindowViewModel(DefaultDependencies dependencies)
+        : this(
+            dependencies.Catalog,
+            dependencies.SettingsStore,
+            dependencies.CaptureFramesReader,
+            dependencies.FileSystem)
+    {
     }
 
     public ObservableCollection<CaptureFrame> VisibleFrames { get; } = [];
@@ -278,7 +296,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            CaptureLoadResult result = await CaptureFramesReader.ReadAsync(
+            CaptureLoadResult result = await captureFramesReader.ReadAsync(
                 path,
                 MaximumFrames,
                 cancellationToken);
@@ -287,7 +305,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             captureClientBuild = DetectClientBuild(result.Frames);
             UpdateFilterOptions();
             ApplyFilters();
-            Title = Path.GetFileName(path);
+            Title = fileSystem.Path.GetFileName(path);
             Summary = BuildSummary(result);
             ErrorMessage = string.Empty;
             OnPropertyChanged(nameof(Title));
@@ -319,6 +337,23 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(HasError));
         }
     }
+
+    private static DefaultDependencies CreateDefaultDependencies()
+    {
+        IFileSystem fileSystem = new FileSystem();
+        InspectorApplicationPaths paths = InspectorApplicationPaths.CreateDefault(fileSystem);
+        return new DefaultDependencies(
+            new StaticDataCatalog(fileSystem, paths.CacheDirectory, TimeProvider.System),
+            new InspectorSettingsStore(fileSystem, paths.ConfigurationDirectory),
+            new CaptureFramesReader(fileSystem),
+            fileSystem);
+    }
+
+    private sealed record DefaultDependencies(
+        StaticDataCatalog Catalog,
+        InspectorSettingsStore SettingsStore,
+        CaptureFramesReader CaptureFramesReader,
+        IFileSystem FileSystem);
 
     public async Task UpdateDataSourcesAsync(
         string? archivePath,

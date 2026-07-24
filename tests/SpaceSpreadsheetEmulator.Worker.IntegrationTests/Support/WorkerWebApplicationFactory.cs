@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -7,33 +8,36 @@ namespace SpaceSpreadsheetEmulator.Worker.IntegrationTests.Support;
 internal sealed class WorkerWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string environment;
-    private readonly DirectoryInfo runtimeDirectory;
+    private readonly IFileSystem fileSystem;
+    private readonly IDirectoryInfo runtimeDirectory;
 
     private WorkerWebApplicationFactory(
+        IFileSystem fileSystem,
         string environment,
         string? artifactDirectory = null,
         string? connectionString = null)
     {
+        this.fileSystem = fileSystem;
         this.environment = environment;
-        string projectDirectory = Path.Combine(
-            FindRepositoryRoot(),
+        string projectDirectory = fileSystem.Path.Combine(
+            FindRepositoryRoot(fileSystem),
             "src",
             "SpaceSpreadsheetEmulator.Worker");
-        runtimeDirectory = Directory.CreateTempSubdirectory(
+        runtimeDirectory = fileSystem.Directory.CreateTempSubdirectory(
             "space-spreadsheet-emulator-worker-test-");
-        File.Copy(
-            Path.Combine(projectDirectory, "appsettings.json"),
-            Path.Combine(runtimeDirectory.FullName, "appsettings.json"));
-        File.Copy(
-            Path.Combine(projectDirectory, $"appsettings.{environment}.json"),
-            Path.Combine(runtimeDirectory.FullName, $"appsettings.{environment}.json"));
+        fileSystem.File.Copy(
+            fileSystem.Path.Combine(projectDirectory, "appsettings.json"),
+            fileSystem.Path.Combine(runtimeDirectory.FullName, "appsettings.json"));
+        fileSystem.File.Copy(
+            fileSystem.Path.Combine(projectDirectory, $"appsettings.{environment}.json"),
+            fileSystem.Path.Combine(runtimeDirectory.FullName, $"appsettings.{environment}.json"));
         if (artifactDirectory is null && connectionString is null)
         {
             return;
         }
 
-        File.WriteAllText(
-            Path.Combine(
+        fileSystem.File.WriteAllText(
+            fileSystem.Path.Combine(
                 runtimeDirectory.FullName,
                 $"appsettings.{environment}.local.json"),
             JsonSerializer.Serialize(
@@ -48,13 +52,14 @@ internal sealed class WorkerWebApplicationFactory : WebApplicationFactory<Progra
                 }));
     }
 
-    public static WorkerWebApplicationFactory UnitTest()
-        => new("UnitTest");
+    public static WorkerWebApplicationFactory UnitTest(IFileSystem fileSystem)
+        => new(fileSystem, "UnitTest");
 
     public static WorkerWebApplicationFactory IntegrationTest(
+        IFileSystem fileSystem,
         string artifactDirectory,
         string? connectionString = null)
-        => new("IntegrationTest", artifactDirectory, connectionString);
+        => new(fileSystem, "IntegrationTest", artifactDirectory, connectionString);
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -65,19 +70,21 @@ internal sealed class WorkerWebApplicationFactory : WebApplicationFactory<Progra
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing && runtimeDirectory.Exists)
+        if (disposing && fileSystem.Directory.Exists(runtimeDirectory.FullName))
         {
-            runtimeDirectory.Delete(recursive: true);
+            fileSystem.Directory.Delete(runtimeDirectory.FullName, recursive: true);
         }
     }
 
-    private static string FindRepositoryRoot()
+    private static string FindRepositoryRoot(IFileSystem fileSystem)
     {
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        for (IDirectoryInfo? directory = fileSystem.DirectoryInfo.New(AppContext.BaseDirectory);
              directory is not null;
              directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "SpaceSpreadsheetEmulator.slnx")))
+            if (fileSystem.File.Exists(fileSystem.Path.Combine(
+                    directory.FullName,
+                    "SpaceSpreadsheetEmulator.slnx")))
             {
                 return directory.FullName;
             }

@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Protocol;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
 using SpaceSpreadsheetEmulator.Protocol.Profiles;
@@ -30,20 +31,22 @@ internal sealed class CapturedStartupReplay
     }
 
     public static CapturedStartupReplay? LoadOptional(
+        IFileSystem fileSystem,
         string directory,
         ProtocolProfile profile,
         Func<string, bool> isRouteAllowed)
     {
+        ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(isRouteAllowed);
         if (string.IsNullOrWhiteSpace(directory))
         {
             return null;
         }
 
-        string root = Path.GetFullPath(directory);
-        string manifestPath = Path.Combine(root, ManifestFileName);
+        string root = fileSystem.Path.GetFullPath(directory);
+        string manifestPath = fileSystem.Path.Combine(root, ManifestFileName);
         ReplayManifest manifest = JsonSerializer.Deserialize<ReplayManifest>(
-            File.ReadAllText(manifestPath),
+            fileSystem.File.ReadAllText(manifestPath),
             JsonOptions) ?? throw new InvalidDataException("The captured startup manifest is empty.");
         ValidateManifest(manifest, profile);
 
@@ -55,8 +58,8 @@ internal sealed class CapturedStartupReplay
                 continue;
             }
 
-            string path = ResolveFile(root, entry.File);
-            byte[] marshal = File.ReadAllBytes(path);
+            string path = ResolveFile(fileSystem, root, entry.File);
+            byte[] marshal = fileSystem.File.ReadAllBytes(path);
             string actualHash = Convert.ToHexStringLower(SHA256.HashData(marshal));
             if (!string.Equals(actualHash, entry.Sha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -143,14 +146,14 @@ internal sealed class CapturedStartupReplay
         }
     }
 
-    private static string ResolveFile(string root, string fileName)
+    private static string ResolveFile(IFileSystem fileSystem, string root, string fileName)
     {
-        if (!string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+        if (!string.Equals(fileSystem.Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
         {
             throw new InvalidDataException("Captured startup response paths must be simple file names.");
         }
 
-        return Path.Combine(root, fileName);
+        return fileSystem.Path.Combine(root, fileName);
     }
 
     private sealed record ReplayManifest(

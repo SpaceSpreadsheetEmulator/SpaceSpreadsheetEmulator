@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Abstractions;
 using System.Text.Json.Nodes;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
 using SpaceSpreadsheetEmulator.Protocol.Compression;
@@ -14,23 +15,24 @@ namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 /// </summary>
 internal static class FixtureVerifier
 {
-    public static int Verify(string root)
+    public static int Verify(IFileSystem fileSystem, string root)
     {
+        ArgumentNullException.ThrowIfNull(fileSystem);
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(ProtocolProfileCatalog.SupportedBuild);
         int failures = 0;
-        string[] hexFiles = Directory.GetFiles(root, "*.hex", SearchOption.AllDirectories);
+        string[] hexFiles = fileSystem.Directory.GetFiles(root, "*.hex", SearchOption.AllDirectories);
         foreach (string hexPath in hexFiles.Order(StringComparer.Ordinal))
         {
-            string jsonPath = Path.ChangeExtension(hexPath, ".json");
+            string jsonPath = fileSystem.Path.ChangeExtension(hexPath, ".json");
             try
             {
-                VerifyOne(hexPath, jsonPath, profile);
-                Console.WriteLine($"PASS {Path.GetRelativePath(root, hexPath)}");
+                VerifyOne(fileSystem, hexPath, jsonPath, profile);
+                Console.WriteLine($"PASS {fileSystem.Path.GetRelativePath(root, hexPath)}");
             }
             catch (Exception exception)
             {
                 failures++;
-                Console.Error.WriteLine($"FAIL {Path.GetRelativePath(root, hexPath)}: {exception.Message}");
+                Console.Error.WriteLine($"FAIL {fileSystem.Path.GetRelativePath(root, hexPath)}: {exception.Message}");
             }
         }
 
@@ -38,10 +40,14 @@ internal static class FixtureVerifier
         return failures == 0 ? 0 : 1;
     }
 
-    private static void VerifyOne(string hexPath, string jsonPath, ProtocolProfile profile)
+    private static void VerifyOne(
+        IFileSystem fileSystem,
+        string hexPath,
+        string jsonPath,
+        ProtocolProfile profile)
     {
-        byte[] bytes = HexFiles.Read(hexPath);
-        JsonObject expected = JsonNode.Parse(File.ReadAllText(jsonPath))!.AsObject();
+        byte[] bytes = HexFiles.Read(fileSystem, hexPath);
+        JsonObject expected = JsonNode.Parse(fileSystem.File.ReadAllText(jsonPath))!.AsObject();
         string codec = expected["codec"]?.GetValue<string>() ?? "blue";
         bool success = expected["success"]?.GetValue<bool>() ?? true;
 

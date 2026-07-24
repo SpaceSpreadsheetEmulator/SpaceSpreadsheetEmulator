@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
 using SpaceSpreadsheetEmulator.Protocol.Compression;
 using SpaceSpreadsheetEmulator.Protocol.MachoNet;
@@ -14,12 +15,13 @@ public class LocalCaptureCompatibilityTests
     [Trait("Category", "LocalCapture")]
     public void MarshalPayloadsDecodeAndPreserveTheirExactWireForm()
     {
-        IReadOnlyList<string> files = LocalCaptureCorpus.GetFrameExportsOrSkip();
+        IFileSystem fileSystem = new FileSystem();
+        IReadOnlyList<string> files = LocalCaptureCorpus.GetFrameExportsOrSkip(fileSystem);
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
         var compression = new ZlibPayloadCodec(profile.Limits);
         int verified = 0;
 
-        foreach (LocalMarshalFrame frame in LocalCaptureCorpus.ReadMarshalFrames(files))
+        foreach (LocalMarshalFrame frame in LocalCaptureCorpus.ReadMarshalFrames(fileSystem, files))
         {
             byte[] marshal = frame.Compression == "zlib" ? Decompress(compression, frame) : frame.Payload;
             DecodeResult<Values.PyValue> decoded = BlueMarshalCodec.Decode(new ReadOnlySequence<byte>(marshal), profile);
@@ -63,12 +65,13 @@ public class LocalCaptureCompatibilityTests
     [Trait("Category", "LocalCapture")]
     public void NestedMachoRequestsAndClientNotificationsDecodeAndPreserveTheirExactWireForm()
     {
-        IReadOnlyList<string> files = LocalCaptureCorpus.GetFrameExportsOrSkip();
+        IFileSystem fileSystem = new FileSystem();
+        IReadOnlyList<string> files = LocalCaptureCorpus.GetFrameExportsOrSkip(fileSystem);
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
         var compression = new ZlibPayloadCodec(profile.Limits);
         int verified = 0;
 
-        foreach (LocalMarshalFrame frame in LocalCaptureCorpus.ReadMarshalFrames(files)
+        foreach (LocalMarshalFrame frame in LocalCaptureCorpus.ReadMarshalFrames(fileSystem, files)
                      .Where(frame => frame.IsMachoPacket && frame.MessageTypeCode is 6 or 12))
         {
             byte[] marshal = frame.Compression == "zlib" ? Decompress(compression, frame) : frame.Payload;

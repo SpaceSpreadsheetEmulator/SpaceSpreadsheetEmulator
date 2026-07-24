@@ -18,7 +18,7 @@ public sealed class LocalChatDirectoryTests
         Assert.True(chats.Join(SolarSystemId, First).Changed);
         Assert.False(chats.Join(SolarSystemId, First).Changed);
         using LocalChatSubscription subscription = chats.Subscribe(SolarSystemId, 8);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), TimeProvider.System);
         await using IAsyncEnumerator<LocalChatEvent> events =
             subscription.ReadAllAsync(timeout.Token).GetAsyncEnumerator();
 
@@ -83,7 +83,7 @@ public sealed class LocalChatDirectoryTests
         await Assert.ThrowsAsync<LocalChatEventGapException>(
             () => firstEvents.MoveNextAsync().AsTask());
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), TimeProvider.System);
         await using IAsyncEnumerator<LocalChatEvent> secondEvents =
             second.ReadAllAsync(timeout.Token).GetAsyncEnumerator();
         Assert.True(await secondEvents.MoveNextAsync());

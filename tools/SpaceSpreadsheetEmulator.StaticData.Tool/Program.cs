@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.StaticData;
 
 return await RunAsync(args);
@@ -19,7 +20,9 @@ static async Task<int> RunAsync(string[] arguments)
 
     try
     {
-        string output = await StaticDataPromoter.PromoteAsync(arguments[2], arguments[4], build, arguments[8]);
+        IFileSystem fileSystem = new FileSystem();
+        var promoter = new StaticDataPromoter(fileSystem, TimeProvider.System);
+        string output = await promoter.PromoteAsync(arguments[2], arguments[4], build, arguments[8]);
         Console.WriteLine(output);
         return 0;
     }

@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Collections.Immutable;
 using System.Buffers;
 using Google.Protobuf;
@@ -27,8 +28,10 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
     [Fact]
     public async Task CharacterEntersMovesAndLeavesThroughRealProcesses()
     {
-        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync();
+        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync(
+            new FileSystem());
         await using StandaloneTopology topology = await StandaloneTopology.StartAsync(
+            new FileSystem(),
             artifact.ArtifactDirectory,
             database.ConnectionString);
         using var client = new ProtocolLoopbackClient(
@@ -95,7 +98,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         };
         using AsyncServerStreamingCall<SessionEventEnvelope> subscription =
             solar.SubscribeSession(subscriptionRequest);
-        using var streamTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var streamTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5), TimeProvider.System);
         Assert.True(await subscription.ResponseStream.MoveNext(streamTimeout.Token));
         SessionEventEnvelope snapshot = subscription.ResponseStream.Current;
         Assert.Equal(SessionEventEnvelope.PayloadOneofCase.Snapshot, snapshot.PayloadCase);
@@ -176,9 +179,11 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
     [Fact]
     public async Task AccountCharacterAndShipSurviveCompleteTopologyRestart()
     {
-        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync();
+        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync(
+            new FileSystem());
         (long CharacterId, long ShipId) beforeRestart;
         await using (StandaloneTopology firstTopology = await StandaloneTopology.StartAsync(
+                         new FileSystem(),
                          artifact.ArtifactDirectory,
                          database.ConnectionString))
         {
@@ -212,6 +217,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         }
 
         await using (StandaloneTopology secondTopology = await StandaloneTopology.StartAsync(
+                         new FileSystem(),
                          artifact.ArtifactDirectory,
                          database.ConnectionString))
         {
@@ -252,12 +258,14 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
     [Fact]
     public async Task InSpaceCharacterRestoresAndCanDockAfterTopologyRestart()
     {
-        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync();
+        await using TopologyStaticDataArtifact artifact = await TopologyStaticDataArtifact.CreateAsync(
+            new FileSystem());
         long characterId;
         long shipId;
         long stationId;
         long solarSystemId;
         await using (StandaloneTopology first = await StandaloneTopology.StartAsync(
+                         new FileSystem(),
                          artifact.ArtifactDirectory,
                          database.ConnectionString))
         {
@@ -281,6 +289,7 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         }
 
         await using (StandaloneTopology second = await StandaloneTopology.StartAsync(
+                         new FileSystem(),
                          artifact.ArtifactDirectory,
                          database.ConnectionString))
         {

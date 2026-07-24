@@ -1,20 +1,27 @@
 using System.Text.Json;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.CaptureInspector.Models;
 
 namespace SpaceSpreadsheetEmulator.CaptureInspector.Services;
 
-public static class CaptureFramesReader
+public sealed class CaptureFramesReader(IFileSystem fileSystem)
 {
+    private readonly IFileSystem fileSystem = fileSystem
+        ?? throw new ArgumentNullException(nameof(fileSystem));
+
     public const int SupportedDecoderSchemaVersion = 2;
 
-    public static async Task<CaptureLoadResult> ReadAsync(string path, int maximumFrames, CancellationToken cancellationToken = default)
+    public async Task<CaptureLoadResult> ReadAsync(
+        string path,
+        int maximumFrames,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumFrames);
 
         var frames = new List<CaptureFrame>();
         var diagnostics = new List<string>();
-        await using var stream = File.OpenRead(path);
+        await using Stream stream = fileSystem.File.OpenRead(path);
         using var reader = new StreamReader(stream);
         var lineNumber = 0;
 

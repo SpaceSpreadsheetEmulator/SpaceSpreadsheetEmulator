@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Protocol.Profiles;
 using SpaceSpreadsheetEmulator.Protocol.Values;
 
@@ -38,11 +39,15 @@ internal sealed class Build3396210StartupProfile
 
     private readonly CapturedStartupReplay? replay;
 
-    public Build3396210StartupProfile(GatewayCompatibilityOptions options)
+    public Build3396210StartupProfile(
+        GatewayCompatibilityOptions options,
+        IFileSystem fileSystem)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(fileSystem);
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
         replay = CapturedStartupReplay.LoadOptional(
+            fileSystem,
             options.CapturedStartupDataDirectory,
             profile,
             ReplayableRoutes.Contains);

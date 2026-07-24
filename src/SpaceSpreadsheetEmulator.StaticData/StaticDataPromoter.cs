@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Abstractions;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -9,8 +10,15 @@ namespace SpaceSpreadsheetEmulator.StaticData;
 /// <summary>
 /// Validates an official SDE archive and promotes it into an immutable, content-addressed SQLite artifact.
 /// </summary>
-public sealed class StaticDataPromoter
+public sealed class StaticDataPromoter(
+    IFileSystem fileSystem,
+    TimeProvider timeProvider)
 {
+    private readonly IFileSystem fileSystem = fileSystem
+        ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly TimeProvider timeProvider = timeProvider
+        ?? throw new ArgumentNullException(nameof(timeProvider));
+
     public const string DatabaseFileName = "static-data.sqlite";
     public const string ManifestFileName = "compatibility-manifest.json";
     public const int CurrentSchemaVersion = 5;
@@ -39,7 +47,7 @@ public sealed class StaticDataPromoter
         new("mapSolarSystems.jsonl", StaticDataEntityKind.SolarSystem, "constellationID", "regionID", null, null, null),
     ];
 
-    public static async Task<string> PromoteAsync(
+    public async Task<string> PromoteAsync(
         string sourceArchive,
         string outputRoot,
         int expectedBuild,
@@ -51,27 +59,27 @@ public sealed class StaticDataPromoter
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedSourceSha256);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(expectedBuild);
 
-        string sourceHash = await ComputeSha256Async(sourceArchive, cancellationToken);
+        string sourceHash = await ComputeSha256Async(fileSystem, sourceArchive, cancellationToken);
         if (!string.Equals(sourceHash, expectedSourceSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException($"The SDE archive SHA-256 is {sourceHash}, expected {expectedSourceSha256}.");
         }
 
-        Directory.CreateDirectory(outputRoot);
-        string stageDirectory = Path.Combine(outputRoot, $".import-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(stageDirectory);
+        fileSystem.Directory.CreateDirectory(outputRoot);
+        string stageDirectory = fileSystem.Path.Combine(outputRoot, $".import-{Guid.NewGuid():N}");
+        fileSystem.Directory.CreateDirectory(stageDirectory);
         try
         {
-            string databasePath = Path.Combine(stageDirectory, DatabaseFileName);
+            string databasePath = fileSystem.Path.Combine(stageDirectory, DatabaseFileName);
             DateTimeOffset releaseDate;
-            await using (FileStream archiveStream = File.OpenRead(sourceArchive))
+            await using (Stream archiveStream = fileSystem.File.OpenRead(sourceArchive))
             using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: false))
             {
                 releaseDate = await ValidateMetadataAsync(archive, expectedBuild, cancellationToken);
                 await ImportAsync(archive, databasePath, cancellationToken);
             }
 
-            string artifactHash = await ComputeSha256Async(databasePath, cancellationToken);
+            string artifactHash = await ComputeSha256Async(fileSystem, databasePath, cancellationToken);
             var manifest = new CompatibilityManifest(
                 expectedBuild,
                 expectedBuild,
@@ -81,10 +89,10 @@ public sealed class StaticDataPromoter
                 CurrentImporterVersion,
                 CurrentSchemaVersion,
                 artifactHash,
-                DateTimeOffset.UtcNow,
+                timeProvider.GetUtcNow(),
                 releaseDate);
-            string manifestPath = Path.Combine(stageDirectory, ManifestFileName);
-            await using (FileStream manifestStream = File.Create(manifestPath))
+            string manifestPath = fileSystem.Path.Combine(stageDirectory, ManifestFileName);
+            await using (Stream manifestStream = fileSystem.File.Create(manifestPath))
             {
                 await JsonSerializer.SerializeAsync(
                     manifestStream,
@@ -94,22 +102,22 @@ public sealed class StaticDataPromoter
                 await manifestStream.WriteAsync("\n"u8.ToArray(), cancellationToken);
             }
 
-            string buildDirectory = Path.Combine(outputRoot, expectedBuild.ToString(CultureInfo.InvariantCulture));
-            Directory.CreateDirectory(buildDirectory);
-            string finalDirectory = Path.Combine(buildDirectory, artifactHash);
-            if (Directory.Exists(finalDirectory))
+            string buildDirectory = fileSystem.Path.Combine(outputRoot, expectedBuild.ToString(CultureInfo.InvariantCulture));
+            fileSystem.Directory.CreateDirectory(buildDirectory);
+            string finalDirectory = fileSystem.Path.Combine(buildDirectory, artifactHash);
+            if (fileSystem.Directory.Exists(finalDirectory))
             {
                 throw new IOException($"The immutable static-data artifact already exists: {finalDirectory}");
             }
 
-            Directory.Move(stageDirectory, finalDirectory);
+            fileSystem.Directory.Move(stageDirectory, finalDirectory);
             return finalDirectory;
         }
         catch (Exception error)
         {
-            if (Directory.Exists(stageDirectory))
+            if (fileSystem.Directory.Exists(stageDirectory))
             {
-                Directory.Delete(stageDirectory, recursive: true);
+                fileSystem.Directory.Delete(stageDirectory, recursive: true);
             }
 
             if (error is SqliteException)
@@ -123,9 +131,13 @@ public sealed class StaticDataPromoter
         }
     }
 
-    public static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken = default)
+    public static async Task<string> ComputeSha256Async(
+        IFileSystem fileSystem,
+        string path,
+        CancellationToken cancellationToken = default)
     {
-        await using FileStream stream = File.OpenRead(path);
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        await using Stream stream = fileSystem.File.OpenRead(path);
         byte[] hash = await SHA256.HashDataAsync(stream, cancellationToken);
         return Convert.ToHexStringLower(hash);
     }

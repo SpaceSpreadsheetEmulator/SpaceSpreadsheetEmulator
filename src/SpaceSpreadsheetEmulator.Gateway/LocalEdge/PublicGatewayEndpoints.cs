@@ -14,14 +14,16 @@ internal static class PublicGatewayEndpoints
         app.MapPost("/eve_public.gateway.Events/Publish", CompleteGrpcCallAsync);
     }
 
-    private static async Task KeepNoticeStreamOpenAsync(HttpContext context)
+    private static async Task KeepNoticeStreamOpenAsync(
+        HttpContext context,
+        TimeProvider timeProvider)
     {
         PrepareGrpcResponse(context);
         await DrainBoundedAsync(context.Request, context.RequestAborted);
         await context.Response.StartAsync(context.RequestAborted);
         try
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, context.RequestAborted);
+            await Task.Delay(Timeout.InfiniteTimeSpan, timeProvider, context.RequestAborted);
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {

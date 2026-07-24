@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO.Abstractions;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Options;
@@ -16,13 +17,14 @@ public sealed partial class GatewayTcpListener(
     ILoginBackend loginBackend,
     ISolarSystemBackend solarSystemBackend,
     IOptions<GatewayCompatibilityOptions> compatibilityOptions,
+    IFileSystem fileSystem,
     TimeProvider timeProvider,
     ILoggerFactory loggerFactory,
     ILogger<GatewayTcpListener> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<long, Task> connections = new();
     private readonly CancellationTokenSource connectionCancellation = new();
-    private readonly Build3396210StartupProfile startupProfile = new(compatibilityOptions.Value);
+    private readonly Build3396210StartupProfile startupProfile = new(compatibilityOptions.Value, fileSystem);
     private long nextConnectionId;
     private TcpListener? listener;
 

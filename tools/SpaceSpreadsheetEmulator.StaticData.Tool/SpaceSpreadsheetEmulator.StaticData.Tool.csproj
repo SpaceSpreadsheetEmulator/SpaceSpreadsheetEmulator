@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="TestableIO.System.IO.Abstractions.Wrappers" />
+  </ItemGroup>
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>sse-data</AssemblyName>

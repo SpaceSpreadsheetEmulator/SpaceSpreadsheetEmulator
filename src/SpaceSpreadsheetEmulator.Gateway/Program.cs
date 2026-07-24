@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using System.IO.Abstractions;
 using System.Net;
 using SpaceSpreadsheetEmulator.Gateway.Backplane;
 using SpaceSpreadsheetEmulator.Gateway.Compatibility;
@@ -7,6 +8,8 @@ using SpaceSpreadsheetEmulator.Gateway.Connections;
 using SpaceSpreadsheetEmulator.Gateway.LocalEdge;
 
 var builder = WebApplication.CreateBuilder(args);
+IFileSystem fileSystem = new FileSystem();
+builder.Services.AddSingleton(fileSystem);
 builder.Configuration.AddJsonFile(
     $"appsettings.{builder.Environment.EnvironmentName}.local.json",
     optional: true,
@@ -41,11 +44,12 @@ builder.Services.AddOptions<GatewayCompatibilityOptions>()
     .Bind(builder.Configuration.GetSection("Gateway:Compatibility"))
     .Validate(
         options => string.IsNullOrWhiteSpace(options.CapturedStartupDataDirectory)
-            || Directory.Exists(options.CapturedStartupDataDirectory),
+            || fileSystem.Directory.Exists(options.CapturedStartupDataDirectory),
         "The captured startup-data directory does not exist.")
     .ValidateOnStart();
 builder.Services.AddSingleton<GatewayConnectionMetrics>();
-builder.Services.AddSingleton(TimeProvider.System);
+TimeProvider timeProvider = TimeProvider.System;
+builder.Services.AddSingleton(timeProvider);
 GatewayBackplaneOptions backplaneOptions = builder.Configuration.GetSection("Gateway:Backplane").Get<GatewayBackplaneOptions>()
     ?? new GatewayBackplaneOptions();
 if (backplaneOptions.Enabled)
@@ -67,7 +71,8 @@ LocalClientEdgeOptions localEdgeOptions = builder.Configuration.GetSection("Gate
 LocalEdgeCertificateSet? localEdgeCertificates = null;
 if (localEdgeOptions.Enabled)
 {
-    localEdgeCertificates = DevelopmentCertificateProvisioner.Ensure(localEdgeOptions);
+    var certificateProvisioner = new DevelopmentCertificateProvisioner(fileSystem, timeProvider);
+    localEdgeCertificates = certificateProvisioner.Ensure(localEdgeOptions);
     builder.WebHost.ConfigureKestrel(options =>
     {
         options.Listen(IPAddress.Parse(localEdgeOptions.Address), localEdgeOptions.TlsPort, listenOptions =>

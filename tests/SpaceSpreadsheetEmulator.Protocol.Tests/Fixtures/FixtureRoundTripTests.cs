@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Globalization;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
 using SpaceSpreadsheetEmulator.Protocol.Profiles;
 using SpaceSpreadsheetEmulator.Protocol.Values;
@@ -8,11 +9,13 @@ namespace SpaceSpreadsheetEmulator.Protocol.Tests.Fixtures;
 
 public class FixtureRoundTripTests
 {
+    private readonly IFileSystem fileSystem = new FileSystem();
+
     [Fact]
     public void EverySuccessfulBlueFixturePreservesExactBytes()
     {
-        string root = Path.Combine(AppContext.BaseDirectory, "fixtures");
-        string[] fixtures = Directory.GetFiles(root, "*.hex", SearchOption.AllDirectories)
+        string root = fileSystem.Path.Combine(AppContext.BaseDirectory, "fixtures");
+        string[] fixtures = fileSystem.Directory.GetFiles(root, "*.hex", SearchOption.AllDirectories)
             .Where(path => IsSuccessfulBlueFixture(path))
             .ToArray();
         ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
@@ -27,17 +30,17 @@ public class FixtureRoundTripTests
         }
     }
 
-    private static bool IsSuccessfulBlueFixture(string hexPath)
+    private bool IsSuccessfulBlueFixture(string hexPath)
     {
-        string json = File.ReadAllText(Path.ChangeExtension(hexPath, ".json"));
+        string json = fileSystem.File.ReadAllText(fileSystem.Path.ChangeExtension(hexPath, ".json"));
         return json.Contains("\"codec\": \"blue\"", StringComparison.Ordinal)
             && json.Contains("\"success\": true", StringComparison.Ordinal);
     }
 
-    private static byte[] ReadHex(string path)
+    private byte[] ReadHex(string path)
     {
         var bytes = new List<byte>();
-        foreach (string line in File.ReadLines(path))
+        foreach (string line in fileSystem.File.ReadLines(path))
         {
             foreach (string token in line.Split('#')[0].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             {

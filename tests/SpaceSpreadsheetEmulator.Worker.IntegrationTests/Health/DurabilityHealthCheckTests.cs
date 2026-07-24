@@ -63,7 +63,7 @@ public sealed class DurabilityHealthCheckTests
         public async ValueTask<bool> WaitForNextTickAsync(
             CancellationToken cancellationToken = default)
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, TimeProvider.System, cancellationToken);
             return false;
         }
 

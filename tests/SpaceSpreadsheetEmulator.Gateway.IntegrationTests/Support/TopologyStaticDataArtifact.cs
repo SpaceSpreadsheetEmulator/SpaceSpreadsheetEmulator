@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.IO.Abstractions;
 using System.Text;
 using SpaceSpreadsheetEmulator.StaticData;
 
@@ -6,8 +7,14 @@ namespace SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 
 internal sealed class TopologyStaticDataArtifact : IAsyncDisposable
 {
-    private TopologyStaticDataArtifact(string root, string artifactDirectory)
+    private readonly IFileSystem fileSystem;
+
+    private TopologyStaticDataArtifact(
+        IFileSystem fileSystem,
+        string root,
+        string artifactDirectory)
     {
+        this.fileSystem = fileSystem;
         Root = root;
         ArtifactDirectory = artifactDirectory;
     }
@@ -16,12 +23,16 @@ internal sealed class TopologyStaticDataArtifact : IAsyncDisposable
 
     public string ArtifactDirectory { get; }
 
-    public static async Task<TopologyStaticDataArtifact> CreateAsync()
+    public static async Task<TopologyStaticDataArtifact> CreateAsync(IFileSystem fileSystem)
     {
-        string root = Path.Combine(Path.GetTempPath(), $"sse-topology-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(root);
-        string archivePath = Path.Combine(root, "sde.zip");
-        using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        string root = fileSystem.Path.Combine(
+            fileSystem.Path.GetTempPath(),
+            $"sse-topology-{Guid.NewGuid():N}");
+        fileSystem.Directory.CreateDirectory(root);
+        string archivePath = fileSystem.Path.Combine(root, "sde.zip");
+        using (Stream archiveStream = fileSystem.File.Create(archivePath))
+        using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create))
         {
             Write(archive, "_sde.jsonl", "{\"buildNumber\":3396210,\"releaseDate\":\"2026-06-16T00:00:00Z\"}");
             Write(archive, "races.jsonl", "{\"_key\":1,\"name\":{\"en\":\"Caldari\"}}");
@@ -41,20 +52,20 @@ internal sealed class TopologyStaticDataArtifact : IAsyncDisposable
             Write(archive, "typeDogma.jsonl", "{\"_key\":601,\"dogmaAttributes\":[{\"attributeID\":37,\"value\":295},{\"attributeID\":70,\"value\":4.5}],\"dogmaEffects\":[{\"effectID\":5000,\"isDefault\":false}]}");
         }
 
-        string hash = await StaticDataPromoter.ComputeSha256Async(archivePath);
-        string artifact = await StaticDataPromoter.PromoteAsync(
+        string hash = await StaticDataPromoter.ComputeSha256Async(fileSystem, archivePath);
+        string artifact = await new StaticDataPromoter(fileSystem, TimeProvider.System).PromoteAsync(
             archivePath,
-            Path.Combine(root, "artifacts"),
+            fileSystem.Path.Combine(root, "artifacts"),
             3_396_210,
             hash);
-        return new TopologyStaticDataArtifact(root, artifact);
+        return new TopologyStaticDataArtifact(fileSystem, root, artifact);
     }
 
     public ValueTask DisposeAsync()
     {
-        if (Directory.Exists(Root))
+        if (fileSystem.Directory.Exists(Root))
         {
-            Directory.Delete(Root, recursive: true);
+            fileSystem.Directory.Delete(Root, recursive: true);
         }
 
         return ValueTask.CompletedTask;

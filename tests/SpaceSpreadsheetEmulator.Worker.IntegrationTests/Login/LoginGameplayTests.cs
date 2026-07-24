@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using Google.Protobuf;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -18,9 +19,11 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
     [Fact]
     public async Task EnrolledAccountReceivesValidatedStarterCharacter()
     {
-        await using TestStaticDataArtifact artifact = await TestStaticDataArtifact.CreateAsync();
+        await using TestStaticDataArtifact artifact = await TestStaticDataArtifact.CreateAsync(
+            new FileSystem());
         await using WorkerWebApplicationFactory factory =
             WorkerWebApplicationFactory.IntegrationTest(
+                new FileSystem(),
                 artifact.ArtifactDirectory,
                 database.ConnectionString);
         using var channel = GrpcChannel.ForAddress("http://localhost", new GrpcChannelOptions
@@ -158,7 +161,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
                 CharacterId = mutation.CharacterId,
                 ShipId = mutation.ShipId,
             });
-        using var streamTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        using var streamTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(4), TimeProvider.System);
         Assert.True(await subscription.ResponseStream.MoveNext(streamTimeout.Token));
         SessionEventEnvelope snapshot = subscription.ResponseStream.Current;
         Assert.Equal(SessionEventEnvelope.PayloadOneofCase.Snapshot, snapshot.PayloadCase);

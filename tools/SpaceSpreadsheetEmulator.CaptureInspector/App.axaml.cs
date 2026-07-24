@@ -4,6 +4,7 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.CaptureInspector.ViewModels;
 using SpaceSpreadsheetEmulator.CaptureInspector.Views;
 using SpaceSpreadsheetEmulator.CaptureInspector.Services;
@@ -24,10 +25,13 @@ public partial class App : Application
             // Avoid duplicate validations from both Avalonia and the CommunityToolkit.
             // More info: https://docs.avaloniaui.net/docs/guides/development-guides/data-validation#manage-validationplugins
             DisableAvaloniaDataAnnotationValidation();
-            InspectorApplicationPaths paths = InspectorApplicationPaths.CreateDefault();
+            IFileSystem fileSystem = new FileSystem();
+            InspectorApplicationPaths paths = InspectorApplicationPaths.CreateDefault(fileSystem);
             var viewModel = new MainWindowViewModel(
-                new StaticDataCatalog(paths.CacheDirectory),
-                new InspectorSettingsStore(paths.ConfigurationDirectory));
+                new StaticDataCatalog(fileSystem, paths.CacheDirectory, TimeProvider.System),
+                new InspectorSettingsStore(fileSystem, paths.ConfigurationDirectory),
+                new CaptureFramesReader(fileSystem),
+                fileSystem);
             desktop.MainWindow = new MainWindow
             {
                 DataContext = viewModel,

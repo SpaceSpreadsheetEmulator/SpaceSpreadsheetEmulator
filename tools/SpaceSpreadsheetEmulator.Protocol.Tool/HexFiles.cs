@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Abstractions;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 
@@ -7,7 +8,11 @@ namespace SpaceSpreadsheetEmulator.Protocol.Tool;
 /// </summary>
 internal static class HexFiles
 {
-    public static byte[] Read(string path) => Parse(File.ReadAllText(path));
+    public static byte[] Read(IFileSystem fileSystem, string path)
+    {
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        return Parse(fileSystem.File.ReadAllText(path));
+    }
 
     public static byte[] Parse(string text)
     {

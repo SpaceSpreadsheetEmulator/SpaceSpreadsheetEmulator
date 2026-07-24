@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -41,6 +42,7 @@ internal sealed class GatewayHostHarness : IAsyncDisposable
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
+        builder.Services.AddSingleton<IFileSystem>(new FileSystem());
         builder.Services.AddSingleton<IOptions<GatewayConnectionOptions>>(Options.Create(new GatewayConnectionOptions
         {
             Enabled = true,
@@ -86,10 +88,10 @@ internal sealed class GatewayHostHarness : IAsyncDisposable
 
     public static async Task WaitUntilAsync(Func<bool> condition)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5), TimeProvider.System);
         while (!condition())
         {
-            await Task.Delay(10, timeout.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(10), TimeProvider.System, timeout.Token);
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Net.Sockets;
 using SpaceSpreadsheetEmulator.Gateway.Connections;
 using SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
@@ -38,7 +39,7 @@ public class ConnectionLimitTests
     [Fact]
     public async Task OptionalDefaultCapacitySmokeTest()
     {
-        if (!GatewayTestSettings.RunConnectionSmoke)
+        if (!GatewayTestSettings.LoadRunConnectionSmoke(new FileSystem()))
         {
             return;
         }

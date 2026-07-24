@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.IO.Abstractions;
 using System.Text;
 using SpaceSpreadsheetEmulator.Milestone2.Tests.Support;
 using SpaceSpreadsheetEmulator.StaticData;
@@ -7,6 +8,9 @@ namespace SpaceSpreadsheetEmulator.Milestone2.Tests.StaticData;
 
 public class StaticDataPromotionTests
 {
+    private static readonly IFileSystem FileSystem = new FileSystem();
+    private static readonly StaticDataPromoter Promoter = new(FileSystem, TimeProvider.System);
+
     private static readonly (string Name, string Json)[] Entries =
     [
         ("races.jsonl", "{\"_key\":1,\"name\":{\"en\":\"Test Race\"}}"),
@@ -29,17 +33,19 @@ public class StaticDataPromotionTests
     [Fact]
     public async Task VerifiedArchivePromotesToImmutableHashAddressedArtifact()
     {
-        using var temporary = new TemporaryDirectory();
-        string archive = Path.Combine(temporary.Path, "mini-sde.zip");
+        using var temporary = new TemporaryDirectory(FileSystem);
+        string archive = FileSystem.Path.Combine(temporary.Path, "mini-sde.zip");
         CreateArchive(archive, build: 3396210);
-        string sourceHash = await StaticDataPromoter.ComputeSha256Async(archive);
+        string sourceHash = await StaticDataPromoter.ComputeSha256Async(FileSystem, archive);
 
-        string artifact = await StaticDataPromoter.PromoteAsync(
+        string artifact = await Promoter.PromoteAsync(
             archive,
-            Path.Combine(temporary.Path, "artifacts"),
+            FileSystem.Path.Combine(temporary.Path, "artifacts"),
             3396210,
             sourceHash);
-        await using SqliteStaticDataStore store = await SqliteStaticDataStore.OpenAsync(artifact);
+        await using SqliteStaticDataStore store = await SqliteStaticDataStore.OpenAsync(
+            FileSystem,
+            artifact);
         StaticDataRecord? system = await store.FindAsync(StaticDataEntityKind.SolarSystem, 10);
         StaticDataRecord? station = await store.FindAsync(StaticDataEntityKind.NpcStation, 7);
         StaticTypeDefinition? type = await store.FindTypeAsync(5);
@@ -67,24 +73,25 @@ public class StaticDataPromotionTests
     [Fact]
     public async Task BuildMismatchIsRejectedWithoutPublishingArtifact()
     {
-        using var temporary = new TemporaryDirectory();
-        string archive = Path.Combine(temporary.Path, "wrong-build.zip");
+        using var temporary = new TemporaryDirectory(FileSystem);
+        string archive = FileSystem.Path.Combine(temporary.Path, "wrong-build.zip");
         CreateArchive(archive, build: 3441022);
-        string sourceHash = await StaticDataPromoter.ComputeSha256Async(archive);
-        string output = Path.Combine(temporary.Path, "artifacts");
+        string sourceHash = await StaticDataPromoter.ComputeSha256Async(FileSystem, archive);
+        string output = FileSystem.Path.Combine(temporary.Path, "artifacts");
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => StaticDataPromoter.PromoteAsync(
+        await Assert.ThrowsAsync<InvalidDataException>(() => Promoter.PromoteAsync(
             archive,
             output,
             3396210,
             sourceHash));
 
-        Assert.False(Directory.Exists(Path.Combine(output, "3396210")));
+        Assert.False(FileSystem.Directory.Exists(FileSystem.Path.Combine(output, "3396210")));
     }
 
     private static void CreateArchive(string path, int build)
     {
-        using ZipArchive archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        using Stream archiveStream = FileSystem.File.Create(path);
+        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create);
         WriteEntry(archive, "_sde.jsonl", $"{{\"buildNumber\":{build},\"releaseDate\":\"2026-06-16T00:00:00Z\"}}");
         foreach ((string name, string json) in Entries)
         {

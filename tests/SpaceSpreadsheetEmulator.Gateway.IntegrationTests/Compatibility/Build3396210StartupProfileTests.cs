@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Gateway.Compatibility;
 using SpaceSpreadsheetEmulator.Protocol.Values;
 
@@ -8,7 +9,9 @@ public sealed class Build3396210StartupProfileTests
     [Fact]
     public void EveryFallbackRouteReturnsItsAuthoredShape()
     {
-        var profile = new Build3396210StartupProfile(new GatewayCompatibilityOptions());
+        var profile = new Build3396210StartupProfile(
+            new GatewayCompatibilityOptions(),
+            new FileSystem());
         CapturedStartupReplaySelector selector = profile.CreateSelector();
         string[] routes =
         [

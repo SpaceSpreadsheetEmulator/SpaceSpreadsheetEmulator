@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SpaceSpreadsheetEmulator.Persistence;
@@ -16,6 +17,7 @@ public sealed class PostgreSqlCollection : ICollectionFixture<PostgreSqlFixture>
 public sealed class PostgreSqlFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer container = TestContainerSettings.Configure(
+            new FileSystem(),
             new PostgreSqlBuilder("postgres:18.4-trixie"))
         .WithDatabase("space_spreadsheet_emulator_tests")
         .WithUsername("sse_tests")

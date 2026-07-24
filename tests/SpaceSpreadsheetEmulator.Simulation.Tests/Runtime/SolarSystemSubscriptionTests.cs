@@ -57,7 +57,7 @@ public sealed class SolarSystemSubscriptionTests
                 Character.CharacterId,
                 Character.ShipId,
                 Epoch);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), TimeProvider.System);
         await using IAsyncEnumerator<SolarSystemEvent> events =
             subscription.ReadAllAsync(timeout.Token).GetAsyncEnumerator();
 
@@ -148,7 +148,7 @@ public sealed class SolarSystemSubscriptionTests
                 Character.CharacterId,
                 Character.ShipId,
                 Epoch);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), TimeProvider.System);
         await using IAsyncEnumerator<SolarSystemEvent> events =
             subscription.ReadAllAsync(timeout.Token).GetAsyncEnumerator();
 

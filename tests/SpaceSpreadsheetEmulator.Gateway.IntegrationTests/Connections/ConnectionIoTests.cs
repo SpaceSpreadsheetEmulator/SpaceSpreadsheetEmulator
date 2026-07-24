@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Immutable;
+using System.IO.Abstractions;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -702,10 +703,11 @@ public class ConnectionIoTests
     [Fact]
     public async Task CapturedStartupReplayLoadsManifestResponse()
     {
-        string directory = Path.Combine(
-            Path.GetTempPath(),
+        IFileSystem fileSystem = new FileSystem();
+        string directory = fileSystem.Path.Combine(
+            fileSystem.Path.GetTempPath(),
             $"sse-captured-startup-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(directory);
+        fileSystem.Directory.CreateDirectory(directory);
         try
         {
             ProtocolProfile profile = ProtocolProfileCatalog.GetRequired(3_396_210);
@@ -715,8 +717,8 @@ public class ConnectionIoTests
                     new PyText("captured"))),
                 profile);
             const string responseFile = "001-config.GetAverageMarketPrices.marshal";
-            await File.WriteAllBytesAsync(
-                Path.Combine(directory, responseFile),
+            await fileSystem.File.WriteAllBytesAsync(
+                fileSystem.Path.Combine(directory, responseFile),
                 value);
             string manifest = JsonSerializer.Serialize(new
             {
@@ -733,7 +735,9 @@ public class ConnectionIoTests
                     },
                 },
             });
-            await File.WriteAllTextAsync(Path.Combine(directory, "manifest.json"), manifest);
+            await fileSystem.File.WriteAllTextAsync(
+                fileSystem.Path.Combine(directory, "manifest.json"),
+                manifest);
 
             await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1, directory);
             using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
@@ -747,17 +751,18 @@ public class ConnectionIoTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            fileSystem.Directory.Delete(directory, recursive: true);
         }
     }
 
     [Fact]
     public async Task CharacterSelectionIgnoresCapturedCoreRoute()
     {
-        string directory = Path.Combine(
-            Path.GetTempPath(),
+        IFileSystem fileSystem = new FileSystem();
+        string directory = fileSystem.Path.Combine(
+            fileSystem.Path.GetTempPath(),
             $"sse-captured-selection-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(directory);
+        fileSystem.Directory.CreateDirectory(directory);
         try
         {
             string manifest = JsonSerializer.Serialize(new
@@ -787,7 +792,9 @@ public class ConnectionIoTests
                     },
                 },
             });
-            await File.WriteAllTextAsync(Path.Combine(directory, "manifest.json"), manifest);
+            await fileSystem.File.WriteAllTextAsync(
+                fileSystem.Path.Combine(directory, "manifest.json"),
+                manifest);
 
             await using GatewayHostHarness gateway = await GatewayHostHarness.StartAsync(1, directory);
             using var client = new ProtocolLoopbackClient(await LoopbackClient.ConnectAsync(gateway.Endpoint));
@@ -815,7 +822,7 @@ public class ConnectionIoTests
         }
         finally
         {
-            Directory.Delete(directory, recursive: true);
+            fileSystem.Directory.Delete(directory, recursive: true);
         }
     }
 

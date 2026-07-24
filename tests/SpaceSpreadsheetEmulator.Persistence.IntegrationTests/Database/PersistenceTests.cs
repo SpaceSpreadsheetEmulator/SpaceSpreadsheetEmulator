@@ -16,6 +16,9 @@ namespace SpaceSpreadsheetEmulator.Persistence.IntegrationTests.Database;
 [Collection(PostgreSqlCollection.Name)]
 public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetime
 {
+    private static readonly DateTimeOffset TestNow =
+        new(2026, 7, 24, 12, 0, 0, TimeSpan.Zero);
+
     public Task InitializeAsync() => database.ResetAsync();
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -66,7 +69,7 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
                 .GetOrCreateAsync(
                     enrollment.Account.AccountId,
                     StarterDefinition(),
-                    DateTimeOffset.UtcNow);
+                    TestNow);
         }
 
         await using (ServiceProvider secondServices = database.CreateServices())
@@ -77,7 +80,7 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
                 .GetOrCreateAsync(
                     enrollment.Account!.AccountId,
                     StarterDefinition(),
-                    DateTimeOffset.UtcNow.AddMinutes(1));
+                    TestNow.AddMinutes(1));
 
             Assert.Equal(accountId, enrollment.Account.AccountId.Value);
             Assert.Equal(firstCharacter.CharacterId, reloaded.CharacterId);
@@ -150,7 +153,7 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
         await services.GetRequiredService<IStarterCharacterStore>().GetOrCreateAsync(
             enrollment.Account!.AccountId,
             StarterDefinition(),
-            DateTimeOffset.UtcNow);
+            TestNow);
 
         IDbContextFactory<GameDbContext> factory =
             services.GetRequiredService<IDbContextFactory<GameDbContext>>();
@@ -163,11 +166,11 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
             character => character.AccountId == accountId);
 
         firstCharacter.Version++;
-        firstCharacter.UpdatedAt = DateTimeOffset.UtcNow;
+        firstCharacter.UpdatedAt = TestNow;
         await firstContext.SaveChangesAsync();
 
         staleCharacter.Version++;
-        staleCharacter.UpdatedAt = DateTimeOffset.UtcNow.AddSeconds(1);
+        staleCharacter.UpdatedAt = TestNow.AddSeconds(1);
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
             async () => await staleContext.SaveChangesAsync());
     }
@@ -182,7 +185,7 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
             .GetOrCreateAsync(
                 enrollment.Account!.AccountId,
                 StarterDefinition(),
-                DateTimeOffset.UtcNow);
+                TestNow);
         ICharacterStateReader reader = services.GetRequiredService<ICharacterStateReader>();
         ICharacterLocationWriter writer = services.GetRequiredService<ICharacterLocationWriter>();
         PlayableCharacterState initial = Assert.IsType<PlayableCharacterState>(
@@ -249,7 +252,7 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
             .GetOrCreateAsync(
                 enrollment.Account!.AccountId,
                 StarterDefinition(),
-                DateTimeOffset.UtcNow);
+                TestNow);
         PlayableCharacterState initial = Assert.IsType<PlayableCharacterState>(
             await services.GetRequiredService<ICharacterStateReader>()
                 .FindAsync(enrollment.Account.AccountId, starter.CharacterId));

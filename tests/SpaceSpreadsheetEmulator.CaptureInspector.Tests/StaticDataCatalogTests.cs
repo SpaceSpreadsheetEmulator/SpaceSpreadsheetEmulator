@@ -1,16 +1,22 @@
 using System.IO.Compression;
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.CaptureInspector.Services;
 
 namespace SpaceSpreadsheetEmulator.CaptureInspector.Tests;
 
 public sealed class StaticDataCatalogTests
 {
+    private static readonly IFileSystem FileSystem = new FileSystem();
+
     [Fact]
     public async Task LoadArchiveAsyncResolvesSupportedStaticIdentifiers()
     {
-        using var directory = TemporaryDirectory.Create();
-        string archivePath = CreateArchive(directory.Path);
-        await using var catalog = new StaticDataCatalog(System.IO.Path.Combine(directory.Path, "cache"));
+        using var directory = TemporaryDirectory.Create(FileSystem);
+        string archivePath = CreateArchive(FileSystem, directory.Path);
+        await using var catalog = new StaticDataCatalog(
+            FileSystem,
+            FileSystem.Path.Combine(directory.Path, "cache"),
+            TimeProvider.System);
 
         await catalog.LoadArchiveAsync(archivePath);
 
@@ -20,10 +26,10 @@ public sealed class StaticDataCatalogTests
         Assert.Equal(3396210, catalog.Compatibility!.SdeBuild);
     }
 
-    private static string CreateArchive(string directory)
+    private static string CreateArchive(IFileSystem fileSystem, string directory)
     {
-        string archivePath = System.IO.Path.Combine(directory, "sde.jsonl.zip");
-        using var stream = File.Create(archivePath);
+        string archivePath = fileSystem.Path.Combine(directory, "sde.jsonl.zip");
+        using Stream stream = fileSystem.File.Create(archivePath);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Create);
         WriteEntry(archive, "_sde.jsonl", """{"buildNumber":3396210,"releaseDate":"2026-07-24T00:00:00Z"}""");
         WriteEntry(archive, "races.jsonl", """{"_key":1,"name":"Race"}""");
@@ -56,17 +62,25 @@ public sealed class StaticDataCatalogTests
 
     private sealed class TemporaryDirectory : IDisposable
     {
-        private TemporaryDirectory(string path) => Path = path;
+        private readonly IFileSystem fileSystem;
+
+        private TemporaryDirectory(IFileSystem fileSystem, string path)
+        {
+            this.fileSystem = fileSystem;
+            Path = path;
+        }
 
         public string Path { get; }
 
-        public static TemporaryDirectory Create()
+        public static TemporaryDirectory Create(IFileSystem fileSystem)
         {
-            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(path);
-            return new TemporaryDirectory(path);
+            string path = fileSystem.Path.Combine(
+                fileSystem.Path.GetTempPath(),
+                Guid.NewGuid().ToString("N"));
+            fileSystem.Directory.CreateDirectory(path);
+            return new TemporaryDirectory(fileSystem, path);
         }
 
-        public void Dispose() => Directory.Delete(Path, recursive: true);
+        public void Dispose() => fileSystem.Directory.Delete(Path, recursive: true);
     }
 }

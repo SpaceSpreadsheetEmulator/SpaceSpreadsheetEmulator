@@ -1,17 +1,20 @@
+using System.IO.Abstractions;
 using SpaceSpreadsheetEmulator.Protocol.Tool;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Tool.Tests.Commands;
 
 public class CommandLineTests
 {
+    private static readonly IFileSystem FileSystem = new FileSystem();
+
     [Fact]
     public void DecodePrintsSemanticJson()
     {
-        using var fixture = TemporaryFile.Create("7e 00 00 00 00 06 2a");
+        using var fixture = TemporaryFile.Create(FileSystem, "7e 00 00 00 00 06 2a");
         using var output = new StringWriter();
         using var error = new StringWriter();
 
-        int exitCode = CommandLine.Run(["decode", fixture.Path], output, error);
+        int exitCode = CommandLine.Run(["decode", fixture.Path], output, error, FileSystem);
 
         Assert.Equal(0, exitCode);
         Assert.Contains("\"kind\": \"integer\"", output.ToString(), StringComparison.Ordinal);
@@ -29,10 +32,14 @@ public class CommandLineTests
               "state": { "kind": "null" }
             }
             """;
-        using var fixture = TemporaryFile.Create(Json);
+        using var fixture = TemporaryFile.Create(FileSystem, Json);
         using var output = new StringWriter();
 
-        int exitCode = CommandLine.Run(["encode", fixture.Path], output, TextWriter.Null);
+        int exitCode = CommandLine.Run(
+            ["encode", fixture.Path],
+            output,
+            TextWriter.Null,
+            FileSystem);
 
         Assert.Equal(0, exitCode);
         Assert.Equal("7e000000001702015401", output.ToString().Trim());
@@ -41,32 +48,44 @@ public class CommandLineTests
     [Fact]
     public void SemanticDiffIgnoresIntegerWidthWhileByteDiffDoesNot()
     {
-        using var narrow = TemporaryFile.Create("7e 00 00 00 00 06 01");
-        using var wide = TemporaryFile.Create("7e 00 00 00 00 03 01 00 00 00 00 00 00 00");
+        using var narrow = TemporaryFile.Create(FileSystem, "7e 00 00 00 00 06 01");
+        using var wide = TemporaryFile.Create(
+            FileSystem,
+            "7e 00 00 00 00 03 01 00 00 00 00 00 00 00");
 
-        Assert.Equal(2, CommandLine.Run(["diff", narrow.Path, wide.Path], TextWriter.Null, TextWriter.Null));
+        Assert.Equal(2, CommandLine.Run(
+            ["diff", narrow.Path, wide.Path],
+            TextWriter.Null,
+            TextWriter.Null,
+            FileSystem));
         Assert.Equal(0, CommandLine.Run(
             ["diff", narrow.Path, wide.Path, "--semantic"],
             TextWriter.Null,
-            TextWriter.Null));
+            TextWriter.Null,
+            FileSystem));
     }
 
     private sealed class TemporaryFile : IDisposable
     {
-        private TemporaryFile(string path)
+        private readonly IFileSystem fileSystem;
+
+        private TemporaryFile(IFileSystem fileSystem, string path)
         {
+            this.fileSystem = fileSystem;
             Path = path;
         }
 
         public string Path { get; }
 
-        public static TemporaryFile Create(string content)
+        public static TemporaryFile Create(IFileSystem fileSystem, string content)
         {
-            string path = System.IO.Path.GetTempFileName();
-            File.WriteAllText(path, content);
-            return new TemporaryFile(path);
+            string path = fileSystem.Path.Combine(
+                fileSystem.Path.GetTempPath(),
+                fileSystem.Path.GetRandomFileName());
+            fileSystem.File.WriteAllText(path, content);
+            return new TemporaryFile(fileSystem, path);
         }
 
-        public void Dispose() => File.Delete(Path);
+        public void Dispose() => fileSystem.File.Delete(Path);
     }
 }

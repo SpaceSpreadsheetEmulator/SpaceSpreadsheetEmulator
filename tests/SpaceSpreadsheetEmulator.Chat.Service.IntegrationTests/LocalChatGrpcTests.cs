@@ -27,7 +27,7 @@ public sealed class LocalChatGrpcTests
                 SolarSystemId = first.SolarSystemId,
                 QueueCapacity = 8,
             });
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4), TimeProvider.System);
         Assert.True(await subscription.ResponseStream.MoveNext(timeout.Token));
         LocalChatEventEnvelope snapshot = subscription.ResponseStream.Current;
         Assert.Equal(LocalChatEventEnvelope.PayloadOneofCase.Snapshot, snapshot.PayloadCase);

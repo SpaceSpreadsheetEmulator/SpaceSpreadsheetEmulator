@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -6,16 +7,41 @@ namespace SpaceSpreadsheetEmulator.Persistence.Database;
 
 internal sealed class GameDbContextDesignFactory : IDesignTimeDbContextFactory<GameDbContext>
 {
+    private readonly IFileSystem fileSystem;
+
+    public GameDbContextDesignFactory()
+        : this(new FileSystem())
+    {
+    }
+
+    internal GameDbContextDesignFactory(IFileSystem fileSystem)
+    {
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        this.fileSystem = fileSystem;
+    }
+
     public GameDbContext CreateDbContext(string[] args)
     {
         string environment = ParseEnvironment(args);
         string projectDirectory = FindProjectDirectory();
-        IConfigurationRoot configuration = new ConfigurationBuilder()
-            .SetBasePath(projectDirectory)
-            .AddJsonFile("appsettings.json", optional: false)
-            .AddJsonFile($"appsettings.{environment}.json", optional: false)
-            .AddJsonFile($"appsettings.{environment}.local.json", optional: true)
-            .Build();
+        using Stream baseSettings = OpenSettings(projectDirectory, "appsettings.json", optional: false)!;
+        using Stream profileSettings = OpenSettings(
+            projectDirectory,
+            $"appsettings.{environment}.json",
+            optional: false)!;
+        using Stream? localSettings = OpenSettings(
+            projectDirectory,
+            $"appsettings.{environment}.local.json",
+            optional: true);
+        var configurationBuilder = new ConfigurationBuilder()
+            .AddJsonStream(baseSettings)
+            .AddJsonStream(profileSettings);
+        if (localSettings is not null)
+        {
+            configurationBuilder.AddJsonStream(localSettings);
+        }
+
+        IConfigurationRoot configuration = configurationBuilder.Build();
         string connectionString = configuration.GetConnectionString("GameDatabase")
             ?? string.Empty;
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -42,24 +68,24 @@ internal sealed class GameDbContextDesignFactory : IDesignTimeDbContextFactory<G
         return "DesignTime";
     }
 
-    private static string FindProjectDirectory()
+    private string FindProjectDirectory()
     {
-        for (DirectoryInfo? directory = new(Directory.GetCurrentDirectory());
+        for (IDirectoryInfo? directory = fileSystem.DirectoryInfo.New(fileSystem.Directory.GetCurrentDirectory());
              directory is not null;
              directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(
+            if (fileSystem.File.Exists(fileSystem.Path.Combine(
                     directory.FullName,
                     "SpaceSpreadsheetEmulator.Persistence.csproj")))
             {
                 return directory.FullName;
             }
 
-            string nestedProject = Path.Combine(
+            string nestedProject = fileSystem.Path.Combine(
                 directory.FullName,
                 "src",
                 "SpaceSpreadsheetEmulator.Persistence");
-            if (File.Exists(Path.Combine(
+            if (fileSystem.File.Exists(fileSystem.Path.Combine(
                     nestedProject,
                     "SpaceSpreadsheetEmulator.Persistence.csproj")))
             {
@@ -69,5 +95,16 @@ internal sealed class GameDbContextDesignFactory : IDesignTimeDbContextFactory<G
 
         throw new DirectoryNotFoundException(
             "Could not find the SpaceSpreadsheetEmulator.Persistence project directory.");
+    }
+
+    private Stream? OpenSettings(string projectDirectory, string fileName, bool optional)
+    {
+        string path = fileSystem.Path.Combine(projectDirectory, fileName);
+        if (optional && !fileSystem.File.Exists(path))
+        {
+            return null;
+        }
+
+        return fileSystem.File.OpenRead(path);
     }
 }

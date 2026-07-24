@@ -1,24 +1,38 @@
+using System.IO.Abstractions;
 using System.Text.Json;
 
 namespace SpaceSpreadsheetEmulator.Protocol.Tests.Support;
 
 internal static class LocalCaptureCorpus
 {
-    private static readonly string? ExplicitRoot = LoadExplicitRoot();
+    public static bool HasExplicitRoot(IFileSystem fileSystem)
+        => !string.IsNullOrWhiteSpace(LoadExplicitRoot(fileSystem));
 
-    public static bool HasExplicitRoot => !string.IsNullOrWhiteSpace(ExplicitRoot);
-
-    public static string ConfiguredRoot => HasExplicitRoot
-        ? Path.GetFullPath(ExplicitRoot!, FindRepositoryRoot())
-        : Path.Combine(FindRepositoryRoot(), "_local", "protocol-captures");
-
-    public static bool HasFrameExports()
-        => Directory.Exists(ConfiguredRoot)
-            && Directory.EnumerateFiles(ConfiguredRoot, "frames*.jsonl", SearchOption.AllDirectories).Any();
-
-    public static IReadOnlyList<string> GetFrameExportsOrSkip()
+    public static string ConfiguredRoot(IFileSystem fileSystem)
     {
-        string[] files = Directory.GetFiles(ConfiguredRoot, "frames*.jsonl", SearchOption.AllDirectories);
+        string? explicitRoot = LoadExplicitRoot(fileSystem);
+        string repositoryRoot = FindRepositoryRoot(fileSystem);
+        return !string.IsNullOrWhiteSpace(explicitRoot)
+            ? fileSystem.Path.GetFullPath(explicitRoot, repositoryRoot)
+            : fileSystem.Path.Combine(repositoryRoot, "_local", "protocol-captures");
+    }
+
+    public static bool HasFrameExports(IFileSystem fileSystem)
+    {
+        string configuredRoot = ConfiguredRoot(fileSystem);
+        return fileSystem.Directory.Exists(configuredRoot)
+            && fileSystem.Directory.EnumerateFiles(
+                configuredRoot,
+                "frames*.jsonl",
+                SearchOption.AllDirectories).Any();
+    }
+
+    public static IReadOnlyList<string> GetFrameExportsOrSkip(IFileSystem fileSystem)
+    {
+        string[] files = fileSystem.Directory.GetFiles(
+            ConfiguredRoot(fileSystem),
+            "frames*.jsonl",
+            SearchOption.AllDirectories);
         if (files.Length == 0)
         {
             throw new InvalidOperationException("The local protocol corpus contains no frames*.jsonl parser exports.");
@@ -27,12 +41,14 @@ internal static class LocalCaptureCorpus
         return files;
     }
 
-    public static IEnumerable<LocalMarshalFrame> ReadMarshalFrames(IEnumerable<string> files)
+    public static IEnumerable<LocalMarshalFrame> ReadMarshalFrames(
+        IFileSystem fileSystem,
+        IEnumerable<string> files)
     {
         foreach (string file in files)
         {
             int lineNumber = 0;
-            foreach (string line in File.ReadLines(file))
+            foreach (string line in fileSystem.File.ReadLines(file))
             {
                 lineNumber++;
                 if (string.IsNullOrWhiteSpace(line))
@@ -100,26 +116,28 @@ internal static class LocalCaptureCorpus
                 ? result
                 : null;
 
-    private static string FindRepositoryRoot()
+    private static string FindRepositoryRoot(IFileSystem fileSystem)
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SpaceSpreadsheetEmulator.slnx")))
+        IDirectoryInfo? directory = fileSystem.DirectoryInfo.New(AppContext.BaseDirectory);
+        while (directory is not null && !fileSystem.File.Exists(fileSystem.Path.Combine(
+                   directory.FullName,
+                   "SpaceSpreadsheetEmulator.slnx")))
         {
             directory = directory.Parent;
         }
 
-        return directory?.FullName ?? Directory.GetCurrentDirectory();
+        return directory?.FullName ?? fileSystem.Directory.GetCurrentDirectory();
     }
 
-    private static string? LoadExplicitRoot()
+    private static string? LoadExplicitRoot(IFileSystem fileSystem)
     {
-        string localSettings = Path.Combine(
+        string localSettings = fileSystem.Path.Combine(
             AppContext.BaseDirectory,
             "appsettings.UnitTest.local.json");
-        string settingsPath = File.Exists(localSettings)
+        string settingsPath = fileSystem.File.Exists(localSettings)
             ? localSettings
-            : Path.Combine(AppContext.BaseDirectory, "appsettings.UnitTest.json");
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            : fileSystem.Path.Combine(AppContext.BaseDirectory, "appsettings.UnitTest.json");
+        using JsonDocument document = JsonDocument.Parse(fileSystem.File.ReadAllText(settingsPath));
         return document.RootElement
             .GetProperty("ProtocolTests")
             .GetProperty("LocalCaptureDirectory")
@@ -141,7 +159,7 @@ public sealed class LocalCaptureFactAttribute : FactAttribute
 {
     public LocalCaptureFactAttribute()
     {
-        if (!LocalCaptureCorpus.HasFrameExports())
+        if (!LocalCaptureCorpus.HasFrameExports(new FileSystem()))
         {
             Skip = "No local frames*.jsonl corpus is configured.";
         }
@@ -152,11 +170,12 @@ public sealed class ExplicitLocalCaptureFactAttribute : FactAttribute
 {
     public ExplicitLocalCaptureFactAttribute()
     {
-        if (!LocalCaptureCorpus.HasExplicitRoot)
+        IFileSystem fileSystem = new FileSystem();
+        if (!LocalCaptureCorpus.HasExplicitRoot(fileSystem))
         {
             Skip = "Set ProtocolTests:LocalCaptureDirectory in appsettings.UnitTest.local.json.";
         }
-        else if (!LocalCaptureCorpus.HasFrameExports())
+        else if (!LocalCaptureCorpus.HasFrameExports(fileSystem))
         {
             Skip = "The configured local capture directory contains no frames*.jsonl exports.";
         }

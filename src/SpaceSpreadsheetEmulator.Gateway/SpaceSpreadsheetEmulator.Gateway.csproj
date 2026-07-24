@@ -3,6 +3,7 @@
     <PackageReference Include="Google.Protobuf" />
     <PackageReference Include="Grpc.Core.Api" />
     <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="TestableIO.System.IO.Abstractions.Wrappers" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Backplane.Contracts/SpaceSpreadsheetEmulator.Backplane.Contracts.csproj" />

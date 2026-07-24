@@ -494,7 +494,7 @@ public sealed class SolarSystemRuntimeTests
             Character,
             SolarVector3.Zero,
             Epoch);
-        using var queueTimeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        using var queueTimeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(100), TimeProvider.System);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => runtime.InspectShipStateAsync(
@@ -637,7 +637,7 @@ public sealed class SolarSystemRuntimeTests
         SimulationEpoch epoch,
         ulong expectedTick)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), TimeProvider.System);
         while (true)
         {
             SolarShipState? state = await runtime.InspectShipStateAsync(
@@ -657,7 +657,7 @@ public sealed class SolarSystemRuntimeTests
     private static async Task<SolarSystemSessionSnapshot> ReadInitialSnapshotAsync(
         SolarSystemSubscription subscription)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), TimeProvider.System);
         await using IAsyncEnumerator<SolarSystemEvent> events =
             subscription.ReadAllAsync(timeout.Token).GetAsyncEnumerator();
         Assert.True(await events.MoveNextAsync());

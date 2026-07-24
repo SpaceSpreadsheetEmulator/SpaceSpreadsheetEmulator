@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using System.Net;
 using System.Net.Sockets;
 
@@ -24,9 +25,11 @@ internal sealed class StandaloneTopology : IAsyncDisposable
     public Uri CoordinatorGrpcAddress { get; }
 
     public static async Task<StandaloneTopology> StartAsync(
+        IFileSystem fileSystem,
         string artifactDirectory,
         string gameDatabaseConnectionString)
     {
+        ArgumentNullException.ThrowIfNull(fileSystem);
         int workerManagementPort = ReservePort();
         int workerGrpcPort = ReservePort();
         int coordinatorManagementPort = ReservePort();
@@ -43,8 +46,9 @@ internal sealed class StandaloneTopology : IAsyncDisposable
         try
         {
             topology.processes.Add(ChildServerProcess.Start(
+                fileSystem,
                 "Worker",
-                ProductionAssembly("Worker"),
+                ProductionAssembly(fileSystem, "Worker"),
                 "AutomatedE2E",
                 settings => AutomatedE2ESettings.ConfigureWorker(
                     settings,
@@ -57,8 +61,9 @@ internal sealed class StandaloneTopology : IAsyncDisposable
                 new Uri($"http://127.0.0.1:{workerManagementPort}/health/ready"));
 
             topology.processes.Add(ChildServerProcess.Start(
+                fileSystem,
                 "Coordinator",
-                ProductionAssembly("Coordinator"),
+                ProductionAssembly(fileSystem, "Coordinator"),
                 "AutomatedE2E",
                 settings => AutomatedE2ESettings.ConfigureCoordinator(
                     settings,
@@ -70,8 +75,9 @@ internal sealed class StandaloneTopology : IAsyncDisposable
                 new Uri($"http://127.0.0.1:{coordinatorManagementPort}/health/ready"));
 
             topology.processes.Add(ChildServerProcess.Start(
+                fileSystem,
                 "Gateway",
-                ProductionAssembly("Gateway"),
+                ProductionAssembly(fileSystem, "Gateway"),
                 "AutomatedE2E",
                 settings => AutomatedE2ESettings.ConfigureGateway(
                     settings,
@@ -102,13 +108,13 @@ internal sealed class StandaloneTopology : IAsyncDisposable
         processes.Clear();
     }
 
-    private static string ProductionAssembly(string projectName)
+    private static string ProductionAssembly(IFileSystem fileSystem, string projectName)
     {
-        string repositoryRoot = FindRepositoryRoot();
-        var outputDirectory = new DirectoryInfo(AppContext.BaseDirectory);
+        string repositoryRoot = FindRepositoryRoot(fileSystem);
+        IDirectoryInfo outputDirectory = fileSystem.DirectoryInfo.New(AppContext.BaseDirectory);
         string configuration = outputDirectory.Parent?.Name
             ?? throw new DirectoryNotFoundException("Could not determine the test build configuration.");
-        return Path.Combine(
+        return fileSystem.Path.Combine(
             repositoryRoot,
             "src",
             $"SpaceSpreadsheetEmulator.{projectName}",
@@ -118,13 +124,13 @@ internal sealed class StandaloneTopology : IAsyncDisposable
             $"SpaceSpreadsheetEmulator.{projectName}.dll");
     }
 
-    private static string FindRepositoryRoot()
+    private static string FindRepositoryRoot(IFileSystem fileSystem)
     {
-        for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        for (IDirectoryInfo? directory = fileSystem.DirectoryInfo.New(AppContext.BaseDirectory);
              directory is not null;
              directory = directory.Parent)
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, ".git")))
+            if (fileSystem.Directory.Exists(fileSystem.Path.Combine(directory.FullName, ".git")))
             {
                 return directory.FullName;
             }
@@ -136,7 +142,7 @@ internal sealed class StandaloneTopology : IAsyncDisposable
     private static async Task WaitForHealthAsync(ChildServerProcess process, Uri endpoint)
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(500) };
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15), TimeProvider.System);
         while (true)
         {
             if (process.HasExited)
@@ -160,13 +166,13 @@ internal sealed class StandaloneTopology : IAsyncDisposable
             {
             }
 
-            await Task.Delay(25, timeout.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(25), TimeProvider.System, timeout.Token);
         }
     }
 
     private async Task WaitForGatewayAsync()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10), TimeProvider.System);
         while (true)
         {
             try
@@ -176,7 +182,7 @@ internal sealed class StandaloneTopology : IAsyncDisposable
             }
             catch (SocketException)
             {
-                await Task.Delay(25, timeout.Token);
+                await Task.Delay(TimeSpan.FromMilliseconds(25), TimeProvider.System, timeout.Token);
             }
         }
     }
