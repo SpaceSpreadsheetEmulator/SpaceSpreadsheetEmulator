@@ -13,7 +13,8 @@ public sealed record SolarSystemSnapshot(
     ulong LastSequence,
     IReadOnlyList<SolarShipSnapshot> Ships)
 {
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 2;
+    public const int MinimumSupportedFormatVersion = 1;
 }
 
 /// <summary>
@@ -23,7 +24,19 @@ public sealed record SolarShipSnapshot(
     CharacterId CharacterId,
     long ShipId,
     SolarVector3 Position,
-    SolarVector3 Velocity);
+    SolarVector3 Velocity,
+    SolarMovementSnapshot? Movement = null);
+
+/// <summary>
+/// Captures the authoritative movement controller assigned to one ship.
+/// </summary>
+public sealed record SolarMovementSnapshot(
+    SolarMovementIntentKind Kind,
+    SolarVector3 Direction,
+    double RequestedSpeed,
+    long? TargetEntityId,
+    double DesiredRange,
+    SolarVector3? TargetPosition);
 
 /// <summary>
 /// Loads and stores versioned solar-system checkpoints without exposing a storage technology.

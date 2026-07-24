@@ -18,7 +18,8 @@ public sealed partial class SolarSystemRuntime : ISolarSystemRuntime
         int commandQueueCapacity,
         ISimulationTickSource tickSource,
         SolarSystemSnapshot? snapshot = null,
-        int sessionEventQueueCapacity = 64)
+        int sessionEventQueueCapacity = 64,
+        double maneuverSpeed = 10)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(commandQueueCapacity);
@@ -29,7 +30,7 @@ public sealed partial class SolarSystemRuntime : ISolarSystemRuntime
         this.tickSource = tickSource;
         this.sessionEventQueueCapacity = sessionEventQueueCapacity;
         eventSequence = snapshot?.LastSequence ?? 0;
-        state = new SolarSystemState(context, snapshot);
+        state = new SolarSystemState(context, snapshot, maneuverSpeed);
         commands = Channel.CreateBounded<RuntimeCommand>(new BoundedChannelOptions(commandQueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,

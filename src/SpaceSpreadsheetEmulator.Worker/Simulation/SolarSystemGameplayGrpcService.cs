@@ -104,22 +104,10 @@ internal sealed partial class SolarSystemGameplayGrpcService(
             return CommandFailure(resolution.Error);
         }
 
-        if (request.Direction is null)
-        {
-            return CommandFailure(Error(
-                "simulation.invalid_movement_intent",
-                "A movement direction is required."));
-        }
-
         SolarMovementIntent intent;
         try
         {
-            intent = new SolarMovementIntent(
-                new RuntimeVector3(
-                    request.Direction.X,
-                    request.Direction.Y,
-                    request.Direction.Z),
-                request.RequestedSpeed);
+            intent = MapMovementIntent(request);
         }
         catch (ArgumentException error)
         {
@@ -139,6 +127,34 @@ internal sealed partial class SolarSystemGameplayGrpcService(
             return CommandFailure(Error("simulation.intent_rejected", error.Message));
         }
     }
+
+    private static SolarMovementIntent MapMovementIntent(MovementIntentRequest request)
+        => request.Kind switch
+        {
+            MovementIntentKind.MovementIntentDirection when request.Direction is not null
+                => new SolarMovementIntent(
+                    new RuntimeVector3(
+                        request.Direction.X,
+                        request.Direction.Y,
+                        request.Direction.Z),
+                    request.RequestedSpeed),
+            MovementIntentKind.MovementIntentDirection
+                => throw new ArgumentException("A movement direction is required."),
+            MovementIntentKind.MovementIntentStop
+                => SolarMovementIntent.Stop(),
+            MovementIntentKind.MovementIntentFollow
+                => SolarMovementIntent.Follow(request.TargetEntityId, request.DesiredRange),
+            MovementIntentKind.MovementIntentOrbit
+                => SolarMovementIntent.Orbit(request.TargetEntityId, request.DesiredRange),
+            MovementIntentKind.MovementIntentGoToPoint when request.TargetPosition is not null
+                => SolarMovementIntent.GoToPoint(new RuntimeVector3(
+                    request.TargetPosition.X,
+                    request.TargetPosition.Y,
+                    request.TargetPosition.Z)),
+            MovementIntentKind.MovementIntentGoToPoint
+                => throw new ArgumentException("A target position is required."),
+            _ => throw new ArgumentException("The movement intent kind is unsupported."),
+        };
 
     public override async Task SubscribeSession(
         SessionSubscriptionRequest request,

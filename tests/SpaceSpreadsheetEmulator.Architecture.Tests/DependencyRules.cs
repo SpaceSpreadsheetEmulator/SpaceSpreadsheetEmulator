@@ -115,6 +115,10 @@ public class DependencyRules
         Assert.Contains("rpc RequestUndock ", contract, StringComparison.Ordinal);
         Assert.Contains("rpc RequestDock ", contract, StringComparison.Ordinal);
         Assert.Contains("rpc SetMovementIntent ", contract, StringComparison.Ordinal);
+        Assert.Contains("MOVEMENT_INTENT_STOP", contract, StringComparison.Ordinal);
+        Assert.Contains("MOVEMENT_INTENT_FOLLOW", contract, StringComparison.Ordinal);
+        Assert.Contains("MOVEMENT_INTENT_ORBIT", contract, StringComparison.Ordinal);
+        Assert.Contains("MOVEMENT_INTENT_GO_TO_POINT", contract, StringComparison.Ordinal);
         Assert.Contains(
             "rpc SubscribeSession (SessionSubscriptionRequest) returns (stream SessionEventEnvelope);",
             contract,

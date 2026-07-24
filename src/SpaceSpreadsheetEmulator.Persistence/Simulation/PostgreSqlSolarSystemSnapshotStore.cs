@@ -145,7 +145,8 @@ internal sealed class PostgreSqlSolarSystemSnapshotStore(
                     ship.CharacterId.Value,
                     ship.ShipId,
                     VectorPayload.From(ship.Position),
-                    VectorPayload.From(ship.Velocity)))
+                    VectorPayload.From(ship.Velocity),
+                    ship.Movement is null ? null : MovementPayload.From(ship.Movement)))
                 .ToArray());
 
     private static SolarSystemSnapshot Map(SnapshotPayload payload)
@@ -159,7 +160,8 @@ internal sealed class PostgreSqlSolarSystemSnapshotStore(
                     new CharacterId(ship.CharacterId),
                     ship.ShipId,
                     ship.Position.ToVector(),
-                    ship.Velocity.ToVector()))
+                    ship.Velocity.ToVector(),
+                    ship.Movement?.ToSnapshot()))
                 .ToArray());
 
     private sealed record SnapshotPayload(
@@ -174,7 +176,35 @@ internal sealed class PostgreSqlSolarSystemSnapshotStore(
         long CharacterId,
         long ShipId,
         VectorPayload Position,
-        VectorPayload Velocity);
+        VectorPayload Velocity,
+        MovementPayload? Movement = null);
+
+    private sealed record MovementPayload(
+        SolarMovementIntentKind Kind,
+        VectorPayload Direction,
+        double RequestedSpeed,
+        long? TargetEntityId,
+        double DesiredRange,
+        VectorPayload? TargetPosition)
+    {
+        public static MovementPayload From(SolarMovementSnapshot movement)
+            => new(
+                movement.Kind,
+                VectorPayload.From(movement.Direction),
+                movement.RequestedSpeed,
+                movement.TargetEntityId,
+                movement.DesiredRange,
+                movement.TargetPosition is { } position ? VectorPayload.From(position) : null);
+
+        public SolarMovementSnapshot ToSnapshot()
+            => new(
+                Kind,
+                Direction.ToVector(),
+                RequestedSpeed,
+                TargetEntityId,
+                DesiredRange,
+                TargetPosition?.ToVector());
+    }
 
     private sealed record VectorPayload(double X, double Y, double Z)
     {

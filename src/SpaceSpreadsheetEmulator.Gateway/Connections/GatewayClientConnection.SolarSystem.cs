@@ -124,7 +124,7 @@ internal sealed partial class GatewayClientConnection
             afterBatchQueued: startSubscription);
     }
 
-    private async Task<RpcDispatchResult> SetMovementIntentAsync(
+    private async Task<RpcDispatchResult> SetDirectionalMovementIntentAsync(
         MachoRpcRequest request,
         CancellationToken cancellationToken)
     {
@@ -139,29 +139,101 @@ internal sealed partial class GatewayClientConnection
             return Result(PyNull.Instance);
         }
 
-        SolarSystemRoute? route = await solarSystemBackend.ResolveAsync(
-            selectedCharacter.SolarSystemId,
-            cancellationToken);
-        if (route is null)
-        {
-            return Result(PyNull.Instance);
-        }
-
-        _ = await solarSystemBackend.SetMovementIntentAsync(
-            route,
-            gatewaySessionId,
-            loginSession!.LoginTicket,
-            selectedCharacter,
-            new SolarSystemMovementIntent(
+        return await SendMovementIntentAsync(
+            request,
+            SolarSystemMovementIntent.Direction(
                 directionX,
                 directionY,
                 directionZ,
-                RequestedSpeed: Math.Sqrt(
+                Math.Sqrt(
                     checked((directionX * directionX)
                         + (directionY * directionY)
                         + (directionZ * directionZ)))),
             cancellationToken);
+    }
+
+    private Task<RpcDispatchResult> StopMovementAsync(
+        MachoRpcRequest request,
+        CancellationToken cancellationToken)
+        => request.Arguments.Items.Length == 0
+            ? SendMovementIntentAsync(request, SolarSystemMovementIntent.Stop(), cancellationToken)
+            : Task.FromResult(Result(PyNull.Instance));
+
+    private Task<RpcDispatchResult> FollowAsync(
+        MachoRpcRequest request,
+        CancellationToken cancellationToken)
+        => TryReadTargetedMovement(request, out long targetEntityId, out double desiredRange)
+            ? SendMovementIntentAsync(
+                request,
+                SolarSystemMovementIntent.Follow(targetEntityId, desiredRange),
+                cancellationToken)
+            : Task.FromResult(Result(PyNull.Instance));
+
+    private Task<RpcDispatchResult> OrbitAsync(
+        MachoRpcRequest request,
+        CancellationToken cancellationToken)
+        => TryReadTargetedMovement(request, out long targetEntityId, out double desiredRange)
+            ? SendMovementIntentAsync(
+                request,
+                SolarSystemMovementIntent.Orbit(targetEntityId, desiredRange),
+                cancellationToken)
+            : Task.FromResult(Result(PyNull.Instance));
+
+    private Task<RpcDispatchResult> GoToPointAsync(
+        MachoRpcRequest request,
+        CancellationToken cancellationToken)
+        => request.Arguments.Items.Length == 3
+            && TryNumber(request.Arguments.Items[0], out double positionX)
+            && TryNumber(request.Arguments.Items[1], out double positionY)
+            && TryNumber(request.Arguments.Items[2], out double positionZ)
+                ? SendMovementIntentAsync(
+                    request,
+                    SolarSystemMovementIntent.GoToPoint(positionX, positionY, positionZ),
+                    cancellationToken)
+                : Task.FromResult(Result(PyNull.Instance));
+
+    private async Task<RpcDispatchResult> SendMovementIntentAsync(
+        MachoRpcRequest request,
+        SolarSystemMovementIntent intent,
+        CancellationToken cancellationToken)
+    {
+        if (selectedCharacter is null
+            || solarSystemBinding is null
+            || !string.Equals(request.BoundObject, solarSystemBinding, StringComparison.Ordinal))
+        {
+            return Result(PyNull.Instance);
+        }
+
+        SolarSystemRoute? route = await solarSystemBackend.ResolveAsync(
+            selectedCharacter.SolarSystemId,
+            cancellationToken);
+        if (route is not null)
+        {
+            _ = await solarSystemBackend.SetMovementIntentAsync(
+                route,
+                gatewaySessionId,
+                loginSession!.LoginTicket,
+                selectedCharacter,
+                intent,
+                cancellationToken);
+        }
+
         return Result(PyNull.Instance);
+    }
+
+    private static bool TryReadTargetedMovement(
+        MachoRpcRequest request,
+        out long targetEntityId,
+        out double desiredRange)
+    {
+        targetEntityId = 0;
+        desiredRange = 0;
+        bool valid = request.Arguments.Items.Length == 2
+            && TryInteger(request.Arguments.Items[0], out targetEntityId)
+            && targetEntityId > 0
+            && TryNumber(request.Arguments.Items[1], out desiredRange)
+            && desiredRange >= 0;
+        return valid;
     }
 
     private async Task<RpcDispatchResult> DockAsync(

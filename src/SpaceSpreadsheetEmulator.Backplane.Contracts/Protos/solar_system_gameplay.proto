@@ -43,6 +43,24 @@ message MovementIntentRequest {
   int64 ship_id = 7;
   SolarVector3 direction = 8;
   double requested_speed = 9;
+  MovementIntentKind kind = 10;
+  int64 target_entity_id = 11;
+  double desired_range = 12;
+  SolarVector3 target_position = 13;
+}
+
+// Selects one protocol-neutral player movement intent.
+enum MovementIntentKind {
+  // Moves along a normalized direction at the requested speed.
+  MOVEMENT_INTENT_DIRECTION = 0;
+  // Cancels the active movement controller and stops the ship.
+  MOVEMENT_INTENT_STOP = 1;
+  // Approaches or keeps range from an authoritative in-system entity.
+  MOVEMENT_INTENT_FOLLOW = 2;
+  // Moves tangentially while correcting toward a range from an entity.
+  MOVEMENT_INTENT_ORBIT = 3;
+  // Moves to an absolute in-system point without overshooting it.
+  MOVEMENT_INTENT_GO_TO_POINT = 4;
 }
 
 // Reports whether Worker accepted an intent and the authoritative resulting state.

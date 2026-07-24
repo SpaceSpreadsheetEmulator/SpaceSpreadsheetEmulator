@@ -177,7 +177,11 @@ internal sealed partial class GatewayClientConnection
             "bound.GetAggressionSettings" => GetCorporationAggressionSettings(request),
             "bound.GetEveOwners" => GetCorporationMembers(request),
             "beyonce.MachoBindObject" => await BindSolarSystemAsync(request, cancellationToken),
-            "bound.CmdGotoDirection" => await SetMovementIntentAsync(request, cancellationToken),
+            "bound.CmdGotoDirection" => await SetDirectionalMovementIntentAsync(request, cancellationToken),
+            "bound.CmdStop" => await StopMovementAsync(request, cancellationToken),
+            "bound.CmdFollowBall" => await FollowAsync(request, cancellationToken),
+            "bound.CmdOrbit" => await OrbitAsync(request, cancellationToken),
+            "bound.CmdGotoPoint" => await GoToPointAsync(request, cancellationToken),
             "bound.CmdDock" => await DockAsync(request, cancellationToken),
             _ => null,
         };
@@ -419,6 +423,23 @@ internal sealed partial class GatewayClientConnection
         if (value is PyFloat number && double.IsFinite(number.Value))
         {
             result = number.Value;
+            return true;
+        }
+
+        result = 0;
+        return false;
+    }
+
+    private static bool TryNumber(PyValue value, out double result)
+    {
+        if (TryFloat(value, out result))
+        {
+            return true;
+        }
+
+        if (TryInteger(value, out long integer))
+        {
+            result = integer;
             return true;
         }
 

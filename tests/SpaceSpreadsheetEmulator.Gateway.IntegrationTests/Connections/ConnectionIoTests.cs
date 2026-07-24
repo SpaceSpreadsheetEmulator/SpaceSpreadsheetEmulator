@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
+using SpaceSpreadsheetEmulator.Gateway.Backplane;
 using SpaceSpreadsheetEmulator.Gateway.IntegrationTests.Support;
 using SpaceSpreadsheetEmulator.Protocol;
 using SpaceSpreadsheetEmulator.Protocol.Codec;
@@ -875,6 +876,53 @@ public class ConnectionIoTests
                 new PyFloat(0)),
             solarBinding));
         Assert.Equal(1, gateway.SolarBackend.MovementIntentCount);
+        Assert.Equal(
+            SolarSystemMovementIntentKind.Direction,
+            gateway.SolarBackend.MovementIntents[0].Kind);
+
+        Assert.IsType<PyNull>(await client.CallAsync(
+            service: null,
+            "CmdFollowBall",
+            new PyTuple(new PyInteger(shipId + 1), new PyFloat(1_000)),
+            solarBinding));
+        Assert.IsType<PyNull>(await client.CallAsync(
+            service: null,
+            "CmdOrbit",
+            new PyTuple(new PyInteger(shipId + 1), new PyInteger(2_500)),
+            solarBinding));
+        Assert.IsType<PyNull>(await client.CallAsync(
+            service: null,
+            "CmdGotoPoint",
+            new PyTuple(new PyFloat(10), new PyFloat(20), new PyFloat(30)),
+            solarBinding));
+        Assert.IsType<PyNull>(await client.CallAsync(
+            service: null,
+            "CmdStop",
+            new PyTuple(),
+            solarBinding));
+        Assert.Collection(
+            gateway.SolarBackend.MovementIntents,
+            intent => Assert.Equal(SolarSystemMovementIntentKind.Direction, intent.Kind),
+            intent =>
+            {
+                Assert.Equal(SolarSystemMovementIntentKind.Follow, intent.Kind);
+                Assert.Equal(shipId + 1, intent.TargetEntityId);
+                Assert.Equal(1_000, intent.DesiredRange);
+            },
+            intent =>
+            {
+                Assert.Equal(SolarSystemMovementIntentKind.Orbit, intent.Kind);
+                Assert.Equal(shipId + 1, intent.TargetEntityId);
+                Assert.Equal(2_500, intent.DesiredRange);
+            },
+            intent =>
+            {
+                Assert.Equal(SolarSystemMovementIntentKind.GoToPoint, intent.Kind);
+                Assert.Equal(10, intent.TargetPositionX);
+                Assert.Equal(20, intent.TargetPositionY);
+                Assert.Equal(30, intent.TargetPositionZ);
+            },
+            intent => Assert.Equal(SolarSystemMovementIntentKind.Stop, intent.Kind));
 
         Assert.IsType<PyNull>(await client.CallAsync(
             service: null,

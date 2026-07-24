@@ -128,6 +128,114 @@ public sealed class SolarSystemRuntimeTests
     }
 
     [Fact]
+    public async Task FollowApproachesTargetAndStopsAtRequestedRange()
+    {
+        var ticks = new ManualSimulationTickSource();
+        var runtime = CreateRuntime(SystemId, Epoch, ticks);
+        var target = new SolarCharacter(
+            new CharacterId(Character.CharacterId.Value + 1),
+            Character.ShipId + 1,
+            SystemId);
+        using var stopping = new CancellationTokenSource();
+        Task run = runtime.RunAsync(stopping.Token);
+        await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
+        await runtime.UndockAsync(target, new SolarVector3(100, 0, 0), Epoch);
+
+        SolarShipState accepted = await runtime.ApplyMovementIntentAsync(
+            Character,
+            SolarMovementIntent.Follow(target.ShipId, desiredRange: 20),
+            Epoch);
+        Assert.Equal(new SolarVector3(10, 0, 0), accepted.Velocity);
+
+        for (ulong expectedTick = 1; expectedTick <= 9; expectedTick++)
+        {
+            ticks.Advance();
+            await WaitForTickAsync(runtime, Character, Epoch, expectedTick);
+        }
+
+        SolarShipState final = Assert.IsType<SolarShipState>(
+            await runtime.InspectShipStateAsync(Character.CharacterId, Character.ShipId, Epoch));
+        Assert.Equal(new SolarVector3(80, 0, 0), final.Position);
+        Assert.Equal(SolarVector3.Zero, final.Velocity);
+
+        stopping.Cancel();
+        await run;
+    }
+
+    [Fact]
+    public async Task OrbitProducesTangentialMotionAndRejectsInvalidTargets()
+    {
+        var ticks = new ManualSimulationTickSource();
+        var runtime = CreateRuntime(SystemId, Epoch, ticks);
+        var target = new SolarCharacter(
+            new CharacterId(Character.CharacterId.Value + 1),
+            Character.ShipId + 1,
+            SystemId);
+        using var stopping = new CancellationTokenSource();
+        Task run = runtime.RunAsync(stopping.Token);
+        await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
+        await runtime.UndockAsync(target, new SolarVector3(100, 0, 0), Epoch);
+
+        SolarShipState accepted = await runtime.ApplyMovementIntentAsync(
+            Character,
+            SolarMovementIntent.Orbit(target.ShipId, desiredRange: 100),
+            Epoch);
+        Assert.Equal(new SolarVector3(0, 10, 0), accepted.Velocity);
+
+        ticks.Advance();
+        SolarShipState moved = await WaitForTickAsync(runtime, Character, Epoch, 1);
+        Assert.Equal(new SolarVector3(0, 10, 0), moved.Position);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.ApplyMovementIntentAsync(
+            Character,
+            SolarMovementIntent.Orbit(Character.ShipId, desiredRange: 100),
+            Epoch));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.ApplyMovementIntentAsync(
+            Character,
+            SolarMovementIntent.Follow(target.ShipId + 1, desiredRange: 100),
+            Epoch));
+
+        stopping.Cancel();
+        await run;
+    }
+
+    [Fact]
+    public async Task GoToPointDoesNotOvershootAndStopClearsController()
+    {
+        var ticks = new ManualSimulationTickSource();
+        var runtime = CreateRuntime(SystemId, Epoch, ticks);
+        using var stopping = new CancellationTokenSource();
+        Task run = runtime.RunAsync(stopping.Token);
+        await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
+
+        await runtime.ApplyMovementIntentAsync(
+            Character,
+            SolarMovementIntent.GoToPoint(new SolarVector3(5, 0, 0)),
+            Epoch);
+        ticks.Advance();
+        SolarShipState arrived = await WaitForTickAsync(runtime, Character, Epoch, 1);
+        Assert.Equal(new SolarVector3(5, 0, 0), arrived.Position);
+        ticks.Advance();
+        SolarShipState stationary = await WaitForTickAsync(runtime, Character, Epoch, 2);
+        Assert.Equal(arrived.Position, stationary.Position);
+        Assert.Equal(SolarVector3.Zero, stationary.Velocity);
+
+        await runtime.ApplyMovementIntentAsync(
+            Character,
+            new SolarMovementIntent(new SolarVector3(1, 0, 0), 3),
+            Epoch);
+        SolarShipState stopped = await runtime.ApplyMovementIntentAsync(
+            Character,
+            SolarMovementIntent.Stop(),
+            Epoch);
+        Assert.Equal(SolarVector3.Zero, stopped.Velocity);
+        SolarSystemSnapshot snapshot = await runtime.CaptureSnapshotAsync(Epoch);
+        Assert.Null(Assert.Single(snapshot.Ships).Movement);
+
+        stopping.Cancel();
+        await run;
+    }
+
+    [Fact]
     public void RegistryRejectsDuplicateSystems()
     {
         var first = CreateRuntime(SystemId, Epoch, new ManualSimulationTickSource());
@@ -238,7 +346,13 @@ public sealed class SolarSystemRuntimeTests
             context,
             8,
             new ManualSimulationTickSource(),
-            new SolarSystemSnapshot(2, SystemId, Epoch, 0, 0, [])));
+            new SolarSystemSnapshot(
+                SolarSystemSnapshot.CurrentFormatVersion + 1,
+                SystemId,
+                Epoch,
+                0,
+                0,
+                [])));
         Assert.Throws<InvalidDataException>(() => new SolarSystemRuntime(
             context,
             8,

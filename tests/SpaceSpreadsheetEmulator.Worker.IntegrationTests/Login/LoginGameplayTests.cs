@@ -167,6 +167,60 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
             movementChanged.ShipStateChanged.Position.Z,
             moved.EntityMoved.Position.Z);
 
+        SolarSystemCommandResult stopped =
+            await solar.SetMovementIntentAsync(new MovementIntentRequest
+            {
+                Context = gameplayContext,
+                LoginTicket = login.LoginTicket,
+                OwnerNodeId = mutation.OwnerNodeId,
+                ExpectedEpoch = mutation.ExpectedEpoch,
+                SolarSystemId = mutation.SolarSystemId,
+                CharacterId = mutation.CharacterId,
+                ShipId = mutation.ShipId,
+                Kind = MovementIntentKind.MovementIntentStop,
+            });
+        Assert.Empty(stopped.Error?.Code ?? string.Empty);
+        Assert.Equal(0, stopped.ShipState.Velocity.X);
+        Assert.Equal(0, stopped.ShipState.Velocity.Y);
+        Assert.Equal(0, stopped.ShipState.Velocity.Z);
+        SessionEventEnvelope stoppedChanged = await ReadEventAsync(
+            subscription.ResponseStream,
+            SessionEventEnvelope.PayloadOneofCase.ShipStateChanged,
+            streamTimeout.Token);
+        Assert.Equal(0, stoppedChanged.ShipStateChanged.Velocity.X);
+
+        SolarSystemCommandResult absentTarget =
+            await solar.SetMovementIntentAsync(new MovementIntentRequest
+            {
+                Context = gameplayContext,
+                LoginTicket = login.LoginTicket,
+                OwnerNodeId = mutation.OwnerNodeId,
+                ExpectedEpoch = mutation.ExpectedEpoch,
+                SolarSystemId = mutation.SolarSystemId,
+                CharacterId = mutation.CharacterId,
+                ShipId = mutation.ShipId,
+                Kind = MovementIntentKind.MovementIntentFollow,
+                TargetEntityId = mutation.ShipId + 1,
+                DesiredRange = 1_000,
+            });
+        Assert.Equal("simulation.intent_rejected", absentTarget.Error.Code);
+
+        SolarSystemCommandResult selfOrbit =
+            await solar.SetMovementIntentAsync(new MovementIntentRequest
+            {
+                Context = gameplayContext,
+                LoginTicket = login.LoginTicket,
+                OwnerNodeId = mutation.OwnerNodeId,
+                ExpectedEpoch = mutation.ExpectedEpoch,
+                SolarSystemId = mutation.SolarSystemId,
+                CharacterId = mutation.CharacterId,
+                ShipId = mutation.ShipId,
+                Kind = MovementIntentKind.MovementIntentOrbit,
+                TargetEntityId = mutation.ShipId,
+                DesiredRange = 2_500,
+            });
+        Assert.Equal("simulation.intent_rejected", selfOrbit.Error.Code);
+
         mutation.IdempotencyKey = "worker-test-dock-1";
         SolarSystemCommandResult docked = await solar.RequestDockAsync(mutation);
         Assert.Empty(docked.Error?.Code ?? string.Empty);

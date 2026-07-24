@@ -282,7 +282,14 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
                     new CharacterId(90_009_999),
                     190_009_999,
                     new SolarVector3(1, 2, 3),
-                    new SolarVector3(4, 5, 6)),
+                    new SolarVector3(4, 5, 6),
+                    new SolarMovementSnapshot(
+                        SolarMovementIntentKind.Follow,
+                        SolarVector3.Zero,
+                        0,
+                        190_009_998,
+                        2_500,
+                        null)),
             ]);
         await store.SaveAsync(snapshot);
         SolarSystemSnapshot loaded = Assert.IsType<SolarSystemSnapshot>(

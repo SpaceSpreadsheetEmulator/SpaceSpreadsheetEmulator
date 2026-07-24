@@ -21,11 +21,52 @@ public sealed record SolarSystemTransition(
     int? StationId,
     ulong Epoch);
 
+public enum SolarSystemMovementIntentKind
+{
+    Direction,
+    Stop,
+    Follow,
+    Orbit,
+    GoToPoint,
+}
+
 public sealed record SolarSystemMovementIntent(
-    double DirectionX,
-    double DirectionY,
-    double DirectionZ,
-    double RequestedSpeed);
+    SolarSystemMovementIntentKind Kind,
+    double DirectionX = 0,
+    double DirectionY = 0,
+    double DirectionZ = 0,
+    double RequestedSpeed = 0,
+    long? TargetEntityId = null,
+    double DesiredRange = 0,
+    double? TargetPositionX = null,
+    double? TargetPositionY = null,
+    double? TargetPositionZ = null)
+{
+    public static SolarSystemMovementIntent Direction(double x, double y, double z, double speed)
+        => new(SolarSystemMovementIntentKind.Direction, x, y, z, speed);
+
+    public static SolarSystemMovementIntent Stop()
+        => new(SolarSystemMovementIntentKind.Stop);
+
+    public static SolarSystemMovementIntent Follow(long targetEntityId, double desiredRange)
+        => new(
+            SolarSystemMovementIntentKind.Follow,
+            TargetEntityId: targetEntityId,
+            DesiredRange: desiredRange);
+
+    public static SolarSystemMovementIntent Orbit(long targetEntityId, double desiredRange)
+        => new(
+            SolarSystemMovementIntentKind.Orbit,
+            TargetEntityId: targetEntityId,
+            DesiredRange: desiredRange);
+
+    public static SolarSystemMovementIntent GoToPoint(double x, double y, double z)
+        => new(
+            SolarSystemMovementIntentKind.GoToPoint,
+            TargetPositionX: x,
+            TargetPositionY: y,
+            TargetPositionZ: z);
+}
 
 public sealed record SolarSystemEntityState(
     long CharacterId,

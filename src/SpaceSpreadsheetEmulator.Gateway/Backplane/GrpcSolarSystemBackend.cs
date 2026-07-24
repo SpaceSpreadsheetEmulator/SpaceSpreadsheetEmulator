@@ -131,14 +131,30 @@ public sealed partial class GrpcSolarSystemBackend : ISolarSystemBackend, IDispo
             SolarSystemId = character.SolarSystemId,
             CharacterId = character.CharacterId,
             ShipId = character.ShipId,
-            Direction = new ContractVector3
+            Kind = Map(intent.Kind),
+            RequestedSpeed = intent.RequestedSpeed,
+            TargetEntityId = intent.TargetEntityId ?? 0,
+            DesiredRange = intent.DesiredRange,
+        };
+        if (intent.Kind is SolarSystemMovementIntentKind.Direction)
+        {
+            request.Direction = new ContractVector3
             {
                 X = intent.DirectionX,
                 Y = intent.DirectionY,
                 Z = intent.DirectionZ,
-            },
-            RequestedSpeed = intent.RequestedSpeed,
-        };
+            };
+        }
+
+        if (intent.Kind is SolarSystemMovementIntentKind.GoToPoint)
+        {
+            request.TargetPosition = new ContractVector3
+            {
+                X = intent.TargetPositionX!.Value,
+                Y = intent.TargetPositionY!.Value,
+                Z = intent.TargetPositionZ!.Value,
+            };
+        }
         try
         {
             SolarSystemCommandResult response = await worker.Client.SetMovementIntentAsync(
@@ -154,6 +170,17 @@ public sealed partial class GrpcSolarSystemBackend : ISolarSystemBackend, IDispo
             return null;
         }
     }
+
+    private static MovementIntentKind Map(SolarSystemMovementIntentKind kind)
+        => kind switch
+        {
+            SolarSystemMovementIntentKind.Direction => MovementIntentKind.MovementIntentDirection,
+            SolarSystemMovementIntentKind.Stop => MovementIntentKind.MovementIntentStop,
+            SolarSystemMovementIntentKind.Follow => MovementIntentKind.MovementIntentFollow,
+            SolarSystemMovementIntentKind.Orbit => MovementIntentKind.MovementIntentOrbit,
+            SolarSystemMovementIntentKind.GoToPoint => MovementIntentKind.MovementIntentGoToPoint,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
 
     public void Dispose()
     {

@@ -36,6 +36,13 @@ ActivateModule
 WarpTo
 ```
 
+`SetMovementIntent` is one command family rather than a collection of remote state
+setters. Its current variants are directional movement, stop, follow at range,
+orbit at range, and go to a point. Gateway translates build-specific method names
+and argument shapes into those neutral variants. Worker validates target presence
+and self-targeting, chooses velocity, advances the maneuver each tick, and persists
+the active controller in the system snapshot.
+
 Gateway owns wire-protocol interpretation and choreography. It may reject malformed,
 unauthenticated, out-of-sequence, or structurally invalid client traffic. It maps an
 accepted wire request into a protocol-neutral intent with the gateway session,
@@ -124,6 +131,10 @@ generic rules, common, helpers, or service-registry assembly.
 - Gateway now maps build-3396210 solar resolve/bind, initial `SetState`, movement
   deltas, and dock teardown without exposing `PyValue`, MachoNet packets, Destiny
   bytes, or bound-object identifiers to Worker.
+- Build-3396210 direction, stop, follow/approach/keep-at-range, orbit, and go-to-point
+  calls map to the same versioned movement-intent command. The current Worker uses a
+  deterministic bounded-speed controller; acceleration, ship-specific maximum
+  velocity, collision, and full flight-model fidelity are future simulation rules.
 - One connection-level sequencer atomically queues response/notification batches
   from RPC and stream producers. Undock location change precedes the ship bind
   response; dock response precedes acceptance, final simulation cleanup, object

@@ -15,11 +15,15 @@ internal sealed class WorkerSolarSystemOptions
 
     public int CheckpointIntervalSeconds { get; init; } = 10;
 
+    public double ManeuverSpeed { get; init; } = 10;
+
     public List<WorkerSolarSystemAssignmentOptions> Assignments { get; init; } = [];
 
     public bool HasValidAssignments()
         => !Enabled
             || (CheckpointIntervalSeconds > 0
+                && double.IsFinite(ManeuverSpeed)
+                && ManeuverSpeed > 0
                 && SessionEventQueueCapacity > 0
                 && Assignments.Count > 0
                 && Assignments.All(assignment =>

@@ -34,7 +34,9 @@ Solar-system gameplay uses the intent-oriented `backplane.v2` contract. Gateway 
 applies accepted commands through the owning system's single-writer mailbox. Gateway
 opens a bounded `SubscribeSession` stream after entering space and validates the
 Worker's fenced initial snapshot and ordered entity/state deltas. Build-specific EVE
-notification mapping remains capture-gated in Gateway.
+notification mapping remains capture-gated in Gateway. The automated movement slice
+currently covers direction, stop, approach/keep-at-range, orbit, and go-to-point;
+the Worker owns target validation and deterministic maneuver resolution.
 
 ## Build and verify
 

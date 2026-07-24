@@ -38,6 +38,8 @@ builder.Services.AddOptions<WorkerSolarSystemOptions>()
         "Worker solar-system session-event queue capacity must be positive.")
     .Validate(options => options.CheckpointIntervalSeconds > 0,
         "Worker solar-system checkpoint interval must be positive.")
+    .Validate(options => double.IsFinite(options.ManeuverSpeed) && options.ManeuverSpeed > 0,
+        "Worker solar-system maneuver speed must be finite and positive.")
     .Validate(options => options.HasValidAssignments(),
         "Worker solar-system assignments require unique positive system IDs and epochs plus unique finite station entry points.")
     .ValidateOnStart();
