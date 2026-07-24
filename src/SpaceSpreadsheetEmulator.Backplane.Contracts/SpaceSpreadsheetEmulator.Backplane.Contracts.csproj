@@ -9,6 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <Protobuf Include="Protos/login_gameplay.proto" GrpcServices="Both" />
+    <Protobuf Include="Protos/local_chat.proto" GrpcServices="Both" />
     <Protobuf Include="Protos/solar_system_gameplay.proto" GrpcServices="Both" />
   </ItemGroup>
 </Project>

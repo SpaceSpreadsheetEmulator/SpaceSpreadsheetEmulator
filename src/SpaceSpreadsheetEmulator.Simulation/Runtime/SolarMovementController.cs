@@ -8,14 +8,14 @@ internal static class SolarMovementController
     public static bool TryResolveVelocity(
         SolarShipState ship,
         SolarMovementIntent intent,
-        IReadOnlyDictionary<long, SolarShipState> shipsById,
-        double maneuverSpeed,
+        IReadOnlyDictionary<long, SolarVector3> targetPositions,
         out SolarVector3 velocity)
     {
+        double maximumVelocity = ship.MovementProfile.MaximumVelocity;
         switch (intent.Kind)
         {
             case SolarMovementIntentKind.Direction:
-                velocity = Scale(intent.Direction, intent.RequestedSpeed);
+                velocity = Scale(intent.Direction, Math.Min(intent.RequestedSpeed, maximumVelocity));
                 return true;
             case SolarMovementIntentKind.Stop:
                 velocity = SolarVector3.Zero;
@@ -25,22 +25,22 @@ internal static class SolarMovementController
                     ship.Position,
                     intent.TargetPosition!.Value,
                     desiredRange: 0,
-                    maneuverSpeed);
+                    maximumVelocity);
                 return true;
             case SolarMovementIntentKind.Follow:
                 return TryResolveTargetedVelocity(
                     ship,
                     intent,
-                    shipsById,
-                    maneuverSpeed,
+                    targetPositions,
+                    maximumVelocity,
                     orbit: false,
                     out velocity);
             case SolarMovementIntentKind.Orbit:
                 return TryResolveTargetedVelocity(
                     ship,
                     intent,
-                    shipsById,
-                    maneuverSpeed,
+                    targetPositions,
+                    maximumVelocity,
                     orbit: true,
                     out velocity);
             default:
@@ -51,20 +51,20 @@ internal static class SolarMovementController
     private static bool TryResolveTargetedVelocity(
         SolarShipState ship,
         SolarMovementIntent intent,
-        IReadOnlyDictionary<long, SolarShipState> shipsById,
-        double maneuverSpeed,
+        IReadOnlyDictionary<long, SolarVector3> targetPositions,
+        double maximumVelocity,
         bool orbit,
         out SolarVector3 velocity)
     {
-        if (!shipsById.TryGetValue(intent.TargetEntityId!.Value, out SolarShipState? target))
+        if (!targetPositions.TryGetValue(intent.TargetEntityId!.Value, out SolarVector3 targetPosition))
         {
             velocity = SolarVector3.Zero;
             return false;
         }
 
         velocity = orbit
-            ? ResolveOrbitVelocity(ship.Position, target.Position, intent.DesiredRange, maneuverSpeed)
-            : MoveToward(ship.Position, target.Position, intent.DesiredRange, maneuverSpeed);
+            ? ResolveOrbitVelocity(ship.Position, targetPosition, intent.DesiredRange, maximumVelocity)
+            : MoveToward(ship.Position, targetPosition, intent.DesiredRange, maximumVelocity);
         return true;
     }
 
@@ -72,7 +72,7 @@ internal static class SolarMovementController
         SolarVector3 position,
         SolarVector3 target,
         double desiredRange,
-        double maneuverSpeed)
+        double maximumVelocity)
     {
         SolarVector3 offset = Subtract(target, position);
         double distance = Magnitude(offset);
@@ -82,14 +82,14 @@ internal static class SolarMovementController
             return SolarVector3.Zero;
         }
 
-        return Scale(offset, Math.Min(maneuverSpeed, remaining) / distance);
+        return Scale(offset, Math.Min(maximumVelocity, remaining) / distance);
     }
 
     private static SolarVector3 ResolveOrbitVelocity(
         SolarVector3 position,
         SolarVector3 target,
         double desiredRange,
-        double maneuverSpeed)
+        double maximumVelocity)
     {
         SolarVector3 offset = Subtract(target, position);
         double distance = Magnitude(offset);
@@ -104,10 +104,10 @@ internal static class SolarMovementController
 
         double radialSpeed = Math.Clamp(
             distance - desiredRange,
-            -maneuverSpeed / 2,
-            maneuverSpeed / 2);
+            -maximumVelocity / 2,
+            maximumVelocity / 2);
         double tangentialSpeed = Math.Sqrt(
-            Math.Max(0, (maneuverSpeed * maneuverSpeed) - (radialSpeed * radialSpeed)));
+            Math.Max(0, (maximumVelocity * maximumVelocity) - (radialSpeed * radialSpeed)));
         return Add(Scale(radial, radialSpeed), Scale(tangent, tangentialSpeed));
     }
 

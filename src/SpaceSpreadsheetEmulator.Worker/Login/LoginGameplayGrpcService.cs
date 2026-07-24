@@ -5,6 +5,7 @@ using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
 using SpaceSpreadsheetEmulator.Gameplay.Stations;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
+using SpaceSpreadsheetEmulator.Inventory.Items;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.StaticData;
 
@@ -199,8 +200,38 @@ public sealed partial class LoginGameplayGrpcService(
             response.StationId = stationId;
         }
 
+        response.InventoryItems.AddRange(character.InventoryItems.Select(MapInventoryItem));
         return response;
     }
+
+    private static Backplane.Contracts.V1.CharacterInventoryItem MapInventoryItem(
+        Gameplay.Characters.CharacterInventoryItem item)
+        => new()
+        {
+            ItemId = item.ItemId,
+            TypeId = item.TypeId,
+            OwnerId = item.OwnerId,
+            LocationId = item.LocationId,
+            LocationKind = item.LocationKind switch
+            {
+                InventoryLocationKind.Station => CharacterInventoryLocationKind.Station,
+                InventoryLocationKind.Item => CharacterInventoryLocationKind.Item,
+                _ => throw new InvalidDataException(
+                    $"Unsupported starter inventory location kind {item.LocationKind}."),
+            },
+            Flag = item.Flag switch
+            {
+                InventoryItemFlag.StationHangar => CharacterInventoryItemFlag.StationHangar,
+                InventoryItemFlag.ShipCargo => CharacterInventoryItemFlag.ShipCargo,
+                _ => throw new InvalidDataException(
+                    $"Unsupported starter inventory flag {item.Flag}."),
+            },
+            Quantity = item.Quantity,
+            Singleton = item.Singleton,
+            CustomName = item.CustomName ?? string.Empty,
+            GroupId = item.GroupId,
+            CategoryId = item.CategoryId,
+        };
 
     private static StationSummary MapStation(StationCatalogEntry station)
         => new()

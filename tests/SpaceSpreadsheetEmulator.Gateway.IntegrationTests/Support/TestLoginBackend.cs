@@ -36,7 +36,7 @@ internal sealed class TestLoginBackend : ILoginBackend
         }
 
         var response = new CharacterSelectionResponse { AccountId = 7 };
-        response.Characters.Add(new CharacterSummary
+        var character = new CharacterSummary
         {
             CharacterId = 90_000_007,
             Name = "Spreadsheet Pilot",
@@ -67,7 +67,32 @@ internal sealed class TestLoginBackend : ILoginBackend
             ShipName = "Cell Reference",
             Balance = "5000",
             SkillPoints = 400_000,
+        };
+        character.InventoryItems.Add(new CharacterInventoryItem
+        {
+            ItemId = 190_000_008,
+            TypeId = 34,
+            OwnerId = character.CharacterId,
+            LocationId = character.StationId,
+            LocationKind = CharacterInventoryLocationKind.Station,
+            Flag = CharacterInventoryItemFlag.StationHangar,
+            Quantity = 100,
+            GroupId = 18,
+            CategoryId = 4,
         });
+        character.InventoryItems.Add(new CharacterInventoryItem
+        {
+            ItemId = 190_000_009,
+            TypeId = 34,
+            OwnerId = character.CharacterId,
+            LocationId = character.ShipId,
+            LocationKind = CharacterInventoryLocationKind.Item,
+            Flag = CharacterInventoryItemFlag.ShipCargo,
+            Quantity = 25,
+            GroupId = 18,
+            CategoryId = 4,
+        });
+        response.Characters.Add(character);
         return Task.FromResult<CharacterSelectionResponse?>(response);
     }
 

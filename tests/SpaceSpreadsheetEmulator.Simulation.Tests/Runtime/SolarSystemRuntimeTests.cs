@@ -1,3 +1,4 @@
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
 
@@ -7,7 +8,14 @@ public sealed class SolarSystemRuntimeTests
 {
     private static readonly SolarSystemId SystemId = new(30_002_780);
     private static readonly SimulationEpoch Epoch = new(7);
-    private static readonly SolarCharacter Character = new(new CharacterId(90_000_001), 190_000_001, SystemId);
+    private static readonly DogmaShipMovementProfile MovementProfile = new(601, 1_000_000, 1, 10);
+    private static readonly SolarCharacter Character =
+        new(
+            new CharacterId(90_000_001),
+            190_000_001,
+            SystemId,
+            MovementProfile,
+            "Spreadsheet Pilot");
 
     [Fact]
     public async Task EnterMoveQueryAndLeaveAreProcessedInMailboxOrder()
@@ -20,7 +28,7 @@ public sealed class SolarSystemRuntimeTests
         var entry = new SolarVector3(100, -50, 25);
         SolarShipState entered = await runtime.UndockAsync(Character, entry, Epoch);
         SolarShipState enteredAgain = await runtime.UndockAsync(Character, new SolarVector3(1, 1, 1), Epoch);
-        var velocity = new SolarVector3(10, -2, 0.5);
+        var velocity = new SolarVector3(8, -2, 0.5);
         SolarShipState velocitySet = await runtime.ApplyMovementIntentAsync(
             Character,
             IntentFromVelocity(velocity),
@@ -34,7 +42,7 @@ public sealed class SolarSystemRuntimeTests
         ticks.Advance();
         SolarShipState moved = await WaitForTickAsync(runtime, Character, Epoch, 1);
 
-        Assert.Equal(new SolarVector3(110, -52, 25.5), moved.Position);
+        Assert.Equal(new SolarVector3(108, -52, 25.5), moved.Position);
         Assert.Equal(1ul, moved.Tick);
 
         SolarCharacterLocation docked = await runtime.DockAsync(Character, 60_000_004, Epoch);
@@ -85,11 +93,32 @@ public sealed class SolarSystemRuntimeTests
     {
         var firstTicks = new ManualSimulationTickSource();
         var secondTicks = new ManualSimulationTickSource();
-        var first = CreateRuntime(SystemId, Epoch, firstTicks);
+        var firstStation = new SolarSystemObjectState(
+            60_000_004,
+            1531,
+            "First Station",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            SolarVector3.Zero,
+            10_000);
+        var first = CreateRuntime(SystemId, Epoch, firstTicks, [firstStation]);
         var secondSystem = new SolarSystemId(30_002_781);
         var secondEpoch = new SimulationEpoch(9);
-        var second = CreateRuntime(secondSystem, secondEpoch, secondTicks);
-        var secondCharacter = new SolarCharacter(new CharacterId(90_000_002), 190_000_002, secondSystem);
+        var secondPlanet = new SolarSystemObjectState(
+            40_176_369,
+            2016,
+            "Second Planet",
+            SolarSystemObjectKind.Planet,
+            secondSystem,
+            new SolarVector3(1_000_000, 0, 0),
+            2_150_000);
+        var second = CreateRuntime(secondSystem, secondEpoch, secondTicks, [secondPlanet]);
+        var secondCharacter = new SolarCharacter(
+            new CharacterId(90_000_002),
+            190_000_002,
+            secondSystem,
+            MovementProfile,
+            "Second Pilot");
         var registry = new SolarSystemRuntimeRegistry([first, second]);
         using var stopping = new CancellationTokenSource();
         Task firstRun = first.RunAsync(stopping.Token);
@@ -97,6 +126,17 @@ public sealed class SolarSystemRuntimeTests
 
         await first.UndockAsync(Character, SolarVector3.Zero, Epoch);
         await second.UndockAsync(secondCharacter, SolarVector3.Zero, secondEpoch);
+        await using SolarSystemSubscription firstSubscription =
+            await first.SubscribeSessionAsync(Character.CharacterId, Character.ShipId, Epoch);
+        await using SolarSystemSubscription secondSubscription =
+            await second.SubscribeSessionAsync(
+                secondCharacter.CharacterId,
+                secondCharacter.ShipId,
+                secondEpoch);
+        SolarSystemSessionSnapshot firstSnapshot =
+            await ReadInitialSnapshotAsync(firstSubscription);
+        SolarSystemSessionSnapshot secondSnapshot =
+            await ReadInitialSnapshotAsync(secondSubscription);
         await first.ApplyMovementIntentAsync(
             Character,
             new SolarMovementIntent(new SolarVector3(1, 0, 0), 5),
@@ -116,6 +156,8 @@ public sealed class SolarSystemRuntimeTests
         Assert.Equal(new SolarVector3(5, 0, 0), firstMoved.Position);
         Assert.Equal(0ul, secondStill!.Tick);
         Assert.Equal(SolarVector3.Zero, secondStill.Position);
+        Assert.Equal([firstStation], firstSnapshot.StaticObjects);
+        Assert.Equal([secondPlanet], secondSnapshot.StaticObjects);
         Assert.True(registry.TryGet(secondSystem, out ISolarSystemRuntime? resolved));
         Assert.Same(second, resolved);
 
@@ -135,7 +177,9 @@ public sealed class SolarSystemRuntimeTests
         var target = new SolarCharacter(
             new CharacterId(Character.CharacterId.Value + 1),
             Character.ShipId + 1,
-            SystemId);
+            SystemId,
+            MovementProfile,
+            "Target Pilot");
         using var stopping = new CancellationTokenSource();
         Task run = runtime.RunAsync(stopping.Token);
         await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
@@ -170,7 +214,9 @@ public sealed class SolarSystemRuntimeTests
         var target = new SolarCharacter(
             new CharacterId(Character.CharacterId.Value + 1),
             Character.ShipId + 1,
-            SystemId);
+            SystemId,
+            MovementProfile,
+            "Target Pilot");
         using var stopping = new CancellationTokenSource();
         Task run = runtime.RunAsync(stopping.Token);
         await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
@@ -233,6 +279,188 @@ public sealed class SolarSystemRuntimeTests
 
         stopping.Cancel();
         await run;
+    }
+
+    [Fact]
+    public async Task DirectionalMovementCannotExceedDogmaMaximumVelocity()
+    {
+        var ticks = new ManualSimulationTickSource();
+        var runtime = CreateRuntime(SystemId, Epoch, ticks);
+        using var stopping = new CancellationTokenSource();
+        Task run = runtime.RunAsync(stopping.Token);
+        await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
+
+        SolarShipState accepted = await runtime.ApplyMovementIntentAsync(
+            Character,
+            new SolarMovementIntent(new SolarVector3(1, 0, 0), requestedSpeed: 1_000),
+            Epoch);
+        ticks.Advance();
+        SolarShipState moved = await WaitForTickAsync(runtime, Character, Epoch, 1);
+
+        Assert.Equal(MovementProfile, accepted.MovementProfile);
+        Assert.Equal(new SolarVector3(10, 0, 0), accepted.Velocity);
+        Assert.Equal(new SolarVector3(10, 0, 0), moved.Position);
+
+        stopping.Cancel();
+        await run;
+    }
+
+    [Fact]
+    public async Task AuthoredStationIsTargetableButCannotCollideWithShipIdentity()
+    {
+        var station = new SolarSystemObjectState(
+            60_000_004,
+            1531,
+            "Test Station",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            new SolarVector3(100, 0, 0),
+            10_000);
+        var ticks = new ManualSimulationTickSource();
+        var runtime = CreateRuntime(SystemId, Epoch, ticks, [station]);
+        using var stopping = new CancellationTokenSource();
+        Task run = runtime.RunAsync(stopping.Token);
+        await runtime.UndockAsync(Character, SolarVector3.Zero, Epoch);
+
+        SolarShipState accepted = await runtime.ApplyMovementIntentAsync(
+            Character,
+            SolarMovementIntent.Follow(station.EntityId, desiredRange: 20),
+            Epoch);
+        Assert.Equal(new SolarVector3(10, 0, 0), accepted.Velocity);
+
+        for (ulong expectedTick = 1; expectedTick <= 9; expectedTick++)
+        {
+            ticks.Advance();
+            await WaitForTickAsync(runtime, Character, Epoch, expectedTick);
+        }
+
+        SolarShipState final = Assert.IsType<SolarShipState>(
+            await runtime.InspectShipStateAsync(Character.CharacterId, Character.ShipId, Epoch));
+        Assert.Equal(new SolarVector3(80, 0, 0), final.Position);
+        Assert.Equal(SolarVector3.Zero, final.Velocity);
+
+        stopping.Cancel();
+        await run;
+
+        var collidingCharacter = Character with { ShipId = station.EntityId };
+        var collisionRuntime = CreateRuntime(
+            SystemId,
+            Epoch,
+            new ManualSimulationTickSource(),
+            [station]);
+        using var collisionStopping = new CancellationTokenSource();
+        Task collisionRun = collisionRuntime.RunAsync(collisionStopping.Token);
+        InvalidOperationException collision = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => collisionRuntime.UndockAsync(
+                collidingCharacter,
+                SolarVector3.Zero,
+                Epoch));
+        Assert.Contains("authored", collision.Message, StringComparison.Ordinal);
+        collisionStopping.Cancel();
+        await collisionRun;
+    }
+
+    [Fact]
+    public void AuthoredObjectsRejectForeignSystemsAndDuplicateIdentities()
+    {
+        var station = new SolarSystemObjectState(
+            60_000_004,
+            1531,
+            "Test Station",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            SolarVector3.Zero,
+            10_000);
+        var foreign = new SolarSystemObjectState(
+            station.EntityId,
+            station.TypeId,
+            station.Name,
+            station.Kind,
+            new SolarSystemId(SystemId.Value + 1),
+            station.Position,
+            station.Radius);
+
+        Assert.Throws<InvalidDataException>(() => CreateRuntime(
+            SystemId,
+            Epoch,
+            new ManualSimulationTickSource(),
+            [station, station]));
+        Assert.Throws<InvalidDataException>(() => CreateRuntime(
+            SystemId,
+            Epoch,
+            new ManualSimulationTickSource(),
+            [foreign]));
+    }
+
+    [Fact]
+    public void AuthoredObjectDefinitionsRejectInvalidIdentityShapeAndDestination()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SolarSystemObjectState(
+            0,
+            1531,
+            "Station",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            SolarVector3.Zero,
+            1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SolarSystemObjectState(
+            1,
+            0,
+            "Station",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            SolarVector3.Zero,
+            1));
+        Assert.Throws<ArgumentException>(() => new SolarSystemObjectState(
+            1,
+            1531,
+            " ",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            SolarVector3.Zero,
+            1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SolarSystemObjectState(
+            1,
+            1531,
+            "Station",
+            (SolarSystemObjectKind)999,
+            SystemId,
+            SolarVector3.Zero,
+            1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SolarSystemObjectState(
+            1,
+            1531,
+            "Station",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            SolarVector3.Zero,
+            double.NaN));
+        Assert.Throws<ArgumentException>(() => new SolarSystemObjectState(
+            1,
+            16,
+            "Gate",
+            SolarSystemObjectKind.JumpGate,
+            SystemId,
+            SolarVector3.Zero,
+            1));
+        Assert.Throws<ArgumentException>(() => new SolarSystemObjectState(
+            1,
+            1531,
+            "Station",
+            SolarSystemObjectKind.Station,
+            SystemId,
+            SolarVector3.Zero,
+            1,
+            SystemId.Value + 1));
+        Assert.Throws<ArgumentException>(() => new SolarSystemObjectState(
+            1,
+            16,
+            "Gate",
+            SolarSystemObjectKind.JumpGate,
+            SystemId,
+            SolarVector3.Zero,
+            1,
+            SystemId.Value));
     }
 
     [Fact]
@@ -338,7 +566,8 @@ public sealed class SolarSystemRuntimeTests
             Character.CharacterId,
             Character.ShipId,
             SolarVector3.Zero,
-            SolarVector3.Zero);
+            SolarVector3.Zero,
+            MovementProfile);
         SolarSystemRuntimeContext context =
             new(SystemId, new NodeId("worker-test"), Epoch);
 
@@ -394,11 +623,13 @@ public sealed class SolarSystemRuntimeTests
     private static SolarSystemRuntime CreateRuntime(
         SolarSystemId systemId,
         SimulationEpoch epoch,
-        ISimulationTickSource ticks)
+        ISimulationTickSource ticks,
+        IReadOnlyList<SolarSystemObjectState>? staticObjects = null)
         => new(
             new SolarSystemRuntimeContext(systemId, new NodeId("worker-test"), epoch),
             commandQueueCapacity: 8,
-            ticks);
+            ticks,
+            staticObjects: staticObjects);
 
     private static async Task<SolarShipState> WaitForTickAsync(
         ISolarSystemRuntime runtime,
@@ -421,6 +652,16 @@ public sealed class SolarSystemRuntimeTests
 
             await Task.Yield();
         }
+    }
+
+    private static async Task<SolarSystemSessionSnapshot> ReadInitialSnapshotAsync(
+        SolarSystemSubscription subscription)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await using IAsyncEnumerator<SolarSystemEvent> events =
+            subscription.ReadAllAsync(timeout.Token).GetAsyncEnumerator();
+        Assert.True(await events.MoveNextAsync());
+        return Assert.IsType<SolarSystemSessionSnapshot>(events.Current);
     }
 
     private static SolarMovementIntent IntentFromVelocity(SolarVector3 velocity)

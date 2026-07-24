@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Dogma/SpaceSpreadsheetEmulator.Dogma.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
   </ItemGroup>
 </Project>

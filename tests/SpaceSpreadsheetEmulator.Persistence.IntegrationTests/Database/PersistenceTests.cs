@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
+using SpaceSpreadsheetEmulator.Inventory.Items;
 using SpaceSpreadsheetEmulator.Persistence;
 using SpaceSpreadsheetEmulator.Persistence.Database;
 using SpaceSpreadsheetEmulator.Persistence.IntegrationTests.Support;
@@ -81,6 +83,24 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
             Assert.Equal(firstCharacter.CharacterId, reloaded.CharacterId);
             Assert.Equal(firstCharacter.ShipId, reloaded.ShipId);
             Assert.Equal("Cell Reference", reloaded.ShipName);
+            Assert.Equal(
+                firstCharacter.InventoryItems.Select(item => item.ItemId),
+                reloaded.InventoryItems.Select(item => item.ItemId));
+            Assert.Collection(
+                reloaded.InventoryItems.OrderBy(item => item.Flag),
+                item =>
+                {
+                    Assert.Equal(InventoryItemFlag.StationHangar, item.Flag);
+                    Assert.Equal(InventoryLocationKind.Station, item.LocationKind);
+                    Assert.Equal(100, item.Quantity);
+                },
+                item =>
+                {
+                    Assert.Equal(InventoryItemFlag.ShipCargo, item.Flag);
+                    Assert.Equal(InventoryLocationKind.Item, item.LocationKind);
+                    Assert.Equal(reloaded.ShipId, item.LocationId);
+                    Assert.Equal(25, item.Quantity);
+                });
         }
 
         await using var connection = new NpgsqlConnection(database.ConnectionString);
@@ -96,13 +116,12 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
             JOIN identity.accounts a USING (account_id)
             WHERE a.normalized_user_name = 'PILOT-B'
             """));
-        Assert.Equal(1L, await ScalarAsync(
+        Assert.Equal(3L, await ScalarAsync(
             connection,
             """
             SELECT count(*)
             FROM inventory.items i
-            JOIN characters.characters c
-              ON c.active_ship_item_id = i.item_id
+            JOIN characters.characters c ON c.character_id = i.owner_id
             JOIN identity.accounts a USING (account_id)
             WHERE a.normalized_user_name = 'PILOT-B'
             """));
@@ -283,13 +302,15 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
                     190_009_999,
                     new SolarVector3(1, 2, 3),
                     new SolarVector3(4, 5, 6),
+                    new DogmaShipMovementProfile(601, 1_163_000, 4.5, 295),
                     new SolarMovementSnapshot(
                         SolarMovementIntentKind.Follow,
                         SolarVector3.Zero,
                         0,
                         190_009_998,
                         2_500,
-                        null)),
+                        null),
+                    "Snapshot Pilot"),
             ]);
         await store.SaveAsync(snapshot);
         SolarSystemSnapshot loaded = Assert.IsType<SolarSystemSnapshot>(
@@ -415,5 +436,9 @@ public sealed class PersistenceTests(PostgreSqlFixture database) : IAsyncLifetim
             20000407,
             10000033,
             601,
-            "Cell Reference");
+            "Cell Reference",
+            [
+                new(34, 100, InventoryItemFlag.StationHangar),
+                new(34, 25, InventoryItemFlag.ShipCargo),
+            ]);
 }

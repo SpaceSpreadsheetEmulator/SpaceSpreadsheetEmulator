@@ -3,7 +3,11 @@ using SpaceSpreadsheetEmulator.Simulation.Runtime;
 using ContractShipState = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarShipState;
 using ContractVector3 = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarVector3;
 using RuntimeShipState = SpaceSpreadsheetEmulator.Simulation.Runtime.SolarShipState;
+using RuntimeObjectState = SpaceSpreadsheetEmulator.Simulation.Runtime.SolarSystemObjectState;
+using RuntimeObjectKind = SpaceSpreadsheetEmulator.Simulation.Runtime.SolarSystemObjectKind;
 using RuntimeVector3 = SpaceSpreadsheetEmulator.Simulation.Runtime.SolarVector3;
+using ContractObjectState = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarSystemObjectState;
+using ContractObjectKind = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarSystemObjectKind;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
@@ -27,7 +31,8 @@ internal sealed partial class SolarSystemGameplayGrpcService
         {
             case SolarSystemSessionSnapshot snapshot:
                 envelope.Snapshot = new SessionSnapshot();
-                envelope.Snapshot.Entities.AddRange(snapshot.Entities.Select(Map));
+                envelope.Snapshot.Entities.AddRange(snapshot.Ships.Select(Map));
+                envelope.Snapshot.StaticObjects.AddRange(snapshot.StaticObjects.Select(Map));
                 break;
             case SolarSystemEntityEntered entered:
                 envelope.EntityEntered = Map(entered.State);
@@ -57,6 +62,7 @@ internal sealed partial class SolarSystemGameplayGrpcService
         => new()
         {
             CharacterId = state.CharacterId.Value,
+            CharacterName = state.CharacterName,
             ShipId = state.ShipId,
             SolarSystemId = state.SolarSystemId.Value,
             Epoch = state.Epoch.Value,
@@ -67,4 +73,31 @@ internal sealed partial class SolarSystemGameplayGrpcService
 
     private static ContractVector3 Map(RuntimeVector3 vector)
         => new() { X = vector.X, Y = vector.Y, Z = vector.Z };
+
+    private static ContractObjectState Map(RuntimeObjectState state)
+    {
+        var mapped = new ContractObjectState
+        {
+            EntityId = state.EntityId,
+            TypeId = state.TypeId,
+            Name = state.Name,
+            Kind = state.Kind switch
+            {
+                RuntimeObjectKind.Station => ContractObjectKind.Station,
+                RuntimeObjectKind.Planet => ContractObjectKind.Planet,
+                RuntimeObjectKind.JumpGate => ContractObjectKind.JumpGate,
+                _ => throw new InvalidOperationException(
+                    $"Unsupported solar-system object kind {state.Kind}."),
+            },
+            SolarSystemId = state.SolarSystemId.Value,
+            Position = Map(state.Position),
+            Radius = state.Radius,
+        };
+        if (state.DestinationSolarSystemId is int destination)
+        {
+            mapped.DestinationSolarSystemId = destination;
+        }
+
+        return mapped;
+    }
 }

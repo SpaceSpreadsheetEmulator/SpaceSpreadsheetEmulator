@@ -42,7 +42,8 @@ public sealed partial class SolarSystemRuntime
             new SubscriptionRegistration(characterId, events));
         events.Writer.TryWrite(new SolarSystemSessionSnapshot(
             eventSequence,
-            state.ListShipStates(expectedEpoch)));
+            state.ListShipStates(expectedEpoch),
+            state.ListStaticObjects(expectedEpoch)));
         return new SolarSystemSubscription(
             events.Reader,
             () => ReleaseSubscriptionAsync(subscriptionId));

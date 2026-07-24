@@ -2,6 +2,8 @@
   <Folder Name="/src/">
     <Project Path="src/SpaceSpreadsheetEmulator.Cluster.Contracts/SpaceSpreadsheetEmulator.Cluster.Contracts.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Cluster/SpaceSpreadsheetEmulator.Cluster.csproj" />
+    <Project Path="src/SpaceSpreadsheetEmulator.Chat/SpaceSpreadsheetEmulator.Chat.csproj" />
+    <Project Path="src/SpaceSpreadsheetEmulator.Chat.Service/SpaceSpreadsheetEmulator.Chat.Service.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Backplane.Contracts/SpaceSpreadsheetEmulator.Backplane.Contracts.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Content/SpaceSpreadsheetEmulator.Content.csproj" />
     <Project Path="src/SpaceSpreadsheetEmulator.Coordinator/SpaceSpreadsheetEmulator.Coordinator.csproj" />
@@ -20,6 +22,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/SpaceSpreadsheetEmulator.Architecture.Tests/SpaceSpreadsheetEmulator.Architecture.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Cluster.Tests/SpaceSpreadsheetEmulator.Cluster.Tests.csproj" />
+    <Project Path="tests/SpaceSpreadsheetEmulator.Chat.Tests/SpaceSpreadsheetEmulator.Chat.Tests.csproj" />
+    <Project Path="tests/SpaceSpreadsheetEmulator.Chat.Service.IntegrationTests/SpaceSpreadsheetEmulator.Chat.Service.IntegrationTests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Coordinator.IntegrationTests/SpaceSpreadsheetEmulator.Coordinator.IntegrationTests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Dogma.Tests/SpaceSpreadsheetEmulator.Dogma.Tests.csproj" />
     <Project Path="tests/SpaceSpreadsheetEmulator.Gateway.IntegrationTests/SpaceSpreadsheetEmulator.Gateway.IntegrationTests.csproj" />

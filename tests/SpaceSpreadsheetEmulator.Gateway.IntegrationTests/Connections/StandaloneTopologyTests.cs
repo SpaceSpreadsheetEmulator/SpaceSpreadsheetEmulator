@@ -100,6 +100,19 @@ public sealed class StandaloneTopologyTests(TopologyPostgreSqlFixture database) 
         SessionEventEnvelope snapshot = subscription.ResponseStream.Current;
         Assert.Equal(SessionEventEnvelope.PayloadOneofCase.Snapshot, snapshot.PayloadCase);
         SolarShipState entered = Assert.Single(snapshot.Snapshot.Entities);
+        Assert.Equal("Spreadsheet Pilot", entered.CharacterName);
+        Assert.Equal(3, snapshot.Snapshot.StaticObjects.Count);
+        Assert.Contains(
+            snapshot.Snapshot.StaticObjects,
+            item => item.Kind is SolarSystemObjectKind.Station
+                && item.EntityId == stationId);
+        Assert.Contains(
+            snapshot.Snapshot.StaticObjects,
+            item => item.Kind is SolarSystemObjectKind.Planet);
+        Assert.Contains(
+            snapshot.Snapshot.StaticObjects,
+            item => item.Kind is SolarSystemObjectKind.JumpGate
+                && item.DestinationSolarSystemId == 30_000_142);
         Assert.Equal(100, entered.Position.X);
         Assert.Equal(-50, entered.Position.Y);
         Assert.Equal(25, entered.Position.Z);

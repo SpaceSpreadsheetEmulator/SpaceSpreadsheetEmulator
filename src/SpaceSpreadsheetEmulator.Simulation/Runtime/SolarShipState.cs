@@ -1,3 +1,4 @@
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
@@ -7,9 +8,11 @@ namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 /// </summary>
 public sealed record SolarShipState(
     CharacterId CharacterId,
+    string CharacterName,
     long ShipId,
     SolarSystemId SolarSystemId,
     SimulationEpoch Epoch,
     ulong Tick,
     SolarVector3 Position,
-    SolarVector3 Velocity);
+    SolarVector3 Velocity,
+    DogmaShipMovementProfile MovementProfile);

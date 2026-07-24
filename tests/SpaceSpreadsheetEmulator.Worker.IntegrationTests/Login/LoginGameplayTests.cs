@@ -74,6 +74,26 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
         Assert.True(selection.Characters[0].ShipId > 0);
         Assert.Equal(25, selection.Characters[0].ShipGroupId);
         Assert.Equal(6, selection.Characters[0].ShipCategoryId);
+        Assert.Collection(
+            selection.Characters[0].InventoryItems.OrderBy(item => item.Flag),
+            item =>
+            {
+                Assert.Equal(CharacterInventoryItemFlag.StationHangar, item.Flag);
+                Assert.Equal(CharacterInventoryLocationKind.Station, item.LocationKind);
+                Assert.Equal(selection.Characters[0].StationId, item.LocationId);
+                Assert.Equal(34, item.TypeId);
+                Assert.Equal(18, item.GroupId);
+                Assert.Equal(4, item.CategoryId);
+                Assert.Equal(100, item.Quantity);
+            },
+            item =>
+            {
+                Assert.Equal(CharacterInventoryItemFlag.ShipCargo, item.Flag);
+                Assert.Equal(CharacterInventoryLocationKind.Item, item.LocationKind);
+                Assert.Equal(selection.Characters[0].ShipId, item.LocationId);
+                Assert.Equal(34, item.TypeId);
+                Assert.Equal(25, item.Quantity);
+            });
         StationSummary station = Assert.Single(stations.Stations);
         Assert.Equal(60_000_004, station.StationId);
         Assert.Equal(30_002_780, station.SolarSystemId);
@@ -131,6 +151,32 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
         SessionEventEnvelope snapshot = subscription.ResponseStream.Current;
         Assert.Equal(SessionEventEnvelope.PayloadOneofCase.Snapshot, snapshot.PayloadCase);
         Assert.Single(snapshot.Snapshot.Entities);
+        Assert.Equal("Spreadsheet Pilot", snapshot.Snapshot.Entities[0].CharacterName);
+        Assert.Collection(
+            snapshot.Snapshot.StaticObjects.OrderBy(item => item.EntityId),
+            planet =>
+            {
+                Assert.Equal(40_176_368, planet.EntityId);
+                Assert.Equal(SolarSystemObjectKind.Planet, planet.Kind);
+                Assert.Equal(2_016, planet.TypeId);
+                Assert.Equal(1_000_000, planet.Position.X);
+                Assert.Equal(2_150_000, planet.Radius);
+                Assert.False(planet.HasDestinationSolarSystemId);
+            },
+            gate =>
+            {
+                Assert.Equal(50_006_751, gate.EntityId);
+                Assert.Equal(SolarSystemObjectKind.JumpGate, gate.Kind);
+                Assert.Equal(16, gate.TypeId);
+                Assert.Equal(30_000_142, gate.DestinationSolarSystemId);
+            },
+            station =>
+            {
+                Assert.Equal(60_000_004, station.EntityId);
+                Assert.Equal(SolarSystemObjectKind.Station, station.Kind);
+                Assert.Equal(1_531, station.TypeId);
+                Assert.Equal("Test Station", station.Name);
+            });
 
         SolarSystemCommandResult movementAccepted =
             await solar.SetMovementIntentAsync(new MovementIntentRequest
@@ -143,9 +189,10 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
                 CharacterId = mutation.CharacterId,
                 ShipId = mutation.ShipId,
                 Direction = new SolarVector3 { X = 1, Y = 0, Z = 0 },
-                RequestedSpeed = 10,
+                RequestedSpeed = 1_000,
             });
         Assert.Empty(movementAccepted.Error?.Code ?? string.Empty);
+        Assert.Equal(295, movementAccepted.ShipState.Velocity.X);
 
         SessionEventEnvelope movementChanged = await ReadEventAsync(
             subscription.ResponseStream,
@@ -158,7 +205,7 @@ public class LoginGameplayTests(WorkerPostgreSqlFixture database) : IAsyncLifeti
         ulong elapsedTicks =
             moved.EntityMoved.Tick - movementChanged.ShipStateChanged.Tick;
         Assert.Equal(
-            movementChanged.ShipStateChanged.Position.X + (10 * elapsedTicks),
+            movementChanged.ShipStateChanged.Position.X + (295 * elapsedTicks),
             moved.EntityMoved.Position.X);
         Assert.Equal(
             movementChanged.ShipStateChanged.Position.Y,

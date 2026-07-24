@@ -10,24 +10,17 @@ internal sealed class SolarSystemState
     private readonly Dictionary<CharacterId, SolarShipState> shipsByCharacter = [];
     private readonly Dictionary<long, CharacterId> charactersByShip = [];
     private readonly Dictionary<CharacterId, SolarMovementIntent> movementByCharacter = [];
-    private readonly double maneuverSpeed;
+    private readonly IReadOnlyDictionary<long, SolarSystemObjectState> staticObjectsById;
     private ulong tick;
     private ulong sequence;
 
     public SolarSystemState(
         SolarSystemRuntimeContext context,
         SolarSystemSnapshot? snapshot = null,
-        double maneuverSpeed = 10)
+        IReadOnlyList<SolarSystemObjectState>? staticObjects = null)
     {
-        if (!double.IsFinite(maneuverSpeed) || maneuverSpeed <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(maneuverSpeed),
-                "The maneuver speed must be finite and positive.");
-        }
-
         this.context = context;
-        this.maneuverSpeed = maneuverSpeed;
+        staticObjectsById = ValidateStaticObjects(context, staticObjects ?? []);
         if (snapshot is not null)
         {
             Restore(snapshot);
@@ -49,6 +42,12 @@ internal sealed class SolarSystemState
                 throw new InvalidOperationException("The selected character is already associated with another ship.");
             }
 
+            if (current.MovementProfile != character.MovementProfile)
+            {
+                throw new InvalidOperationException(
+                    "The selected ship's build-pinned movement Dogma conflicts with its runtime state.");
+            }
+
             return current;
         }
 
@@ -58,14 +57,22 @@ internal sealed class SolarSystemState
             throw new InvalidOperationException("The selected ship is already associated with another character.");
         }
 
+        if (staticObjectsById.ContainsKey(character.ShipId))
+        {
+            throw new InvalidOperationException(
+                "The selected ship identifier conflicts with an authored solar-system object.");
+        }
+
         var state = new SolarShipState(
             character.CharacterId,
+            character.CharacterName,
             character.ShipId,
             character.SolarSystemId,
             context.Epoch,
             tick,
             entryPosition,
-            SolarVector3.Zero);
+            SolarVector3.Zero,
+            character.MovementProfile);
         shipsByCharacter.Add(character.CharacterId, state);
         charactersByShip.Add(character.ShipId, character.CharacterId);
         sequence = checked(sequence + 1);
@@ -105,12 +112,11 @@ internal sealed class SolarSystemState
         ArgumentNullException.ThrowIfNull(intent);
         SolarShipState current = RequiredShip(character);
         ValidateTarget(current, intent);
-        Dictionary<long, SolarShipState> shipsById = CreateShipLookup();
+        Dictionary<long, SolarVector3> targetPositions = CreateTargetPositionLookup();
         if (!SolarMovementController.TryResolveVelocity(
                 current,
                 intent,
-                shipsById,
-                maneuverSpeed,
+                targetPositions,
                 out SolarVector3 velocity))
         {
             throw new InvalidOperationException("The movement target is no longer present in this solar system.");
@@ -160,7 +166,7 @@ internal sealed class SolarSystemState
     {
         tick = checked(tick + 1);
         sequence = checked(sequence + 1);
-        Dictionary<long, SolarShipState> shipsById = CreateShipLookup();
+        Dictionary<long, SolarVector3> targetPositions = CreateTargetPositionLookup();
         var moved = new List<SolarShipState>(shipsByCharacter.Count);
         foreach (SolarShipState current in shipsByCharacter.Values.OrderBy(state => state.ShipId).ToArray())
         {
@@ -169,8 +175,7 @@ internal sealed class SolarSystemState
                 && !SolarMovementController.TryResolveVelocity(
                     current,
                     intent,
-                    shipsById,
-                    maneuverSpeed,
+                    targetPositions,
                     out velocity))
             {
                 movementByCharacter.Remove(current.CharacterId);
@@ -203,6 +208,14 @@ internal sealed class SolarSystemState
             .ToArray();
     }
 
+    public IReadOnlyList<SolarSystemObjectState> ListStaticObjects(SimulationEpoch expectedEpoch)
+    {
+        ValidateEpoch(expectedEpoch);
+        return staticObjectsById.Values
+            .OrderBy(state => state.EntityId)
+            .ToArray();
+    }
+
     public SolarSystemSnapshot CaptureSnapshot(SimulationEpoch expectedEpoch)
     {
         ValidateEpoch(expectedEpoch);
@@ -219,9 +232,11 @@ internal sealed class SolarSystemState
                     state.ShipId,
                     state.Position,
                     state.Velocity,
+                    state.MovementProfile,
                     movementByCharacter.TryGetValue(state.CharacterId, out SolarMovementIntent? movement)
                         ? movement.ToSnapshot()
-                        : null))
+                        : null,
+                    state.CharacterName))
                 .ToArray());
     }
 
@@ -240,8 +255,17 @@ internal sealed class SolarSystemState
         return current;
     }
 
-    private Dictionary<long, SolarShipState> CreateShipLookup()
-        => shipsByCharacter.Values.ToDictionary(ship => ship.ShipId);
+    private Dictionary<long, SolarVector3> CreateTargetPositionLookup()
+    {
+        Dictionary<long, SolarVector3> targets = staticObjectsById.Values
+            .ToDictionary(item => item.EntityId, item => item.Position);
+        foreach (SolarShipState ship in shipsByCharacter.Values)
+        {
+            targets.Add(ship.ShipId, ship.Position);
+        }
+
+        return targets;
+    }
 
     private void ValidateTarget(SolarShipState current, SolarMovementIntent intent)
     {
@@ -255,7 +279,8 @@ internal sealed class SolarSystemState
             throw new InvalidOperationException("A ship cannot follow or orbit itself.");
         }
 
-        if (!charactersByShip.ContainsKey(targetEntityId))
+        if (!charactersByShip.ContainsKey(targetEntityId)
+            && !staticObjectsById.ContainsKey(targetEntityId))
         {
             throw new InvalidOperationException("The movement target is not present in this solar system.");
         }
@@ -264,6 +289,7 @@ internal sealed class SolarSystemState
     private void Validate(SolarCharacter character, SimulationEpoch expectedEpoch)
     {
         ArgumentNullException.ThrowIfNull(character);
+        ArgumentNullException.ThrowIfNull(character.MovementProfile);
         ValidateEpoch(expectedEpoch);
         if (character.SolarSystemId != context.SolarSystemId)
         {
@@ -273,6 +299,12 @@ internal sealed class SolarSystemState
         if (character.ShipId <= 0)
         {
             throw new InvalidOperationException("A ship identifier must be positive.");
+        }
+
+        if (string.IsNullOrWhiteSpace(character.CharacterName)
+            || character.CharacterName.Length > 100)
+        {
+            throw new InvalidOperationException("A character name must be between 1 and 100 characters.");
         }
     }
 
@@ -303,16 +335,21 @@ internal sealed class SolarSystemState
         foreach (SolarShipSnapshot ship in snapshot.Ships.OrderBy(ship => ship.ShipId))
         {
             if (ship.ShipId <= 0
+                || string.IsNullOrWhiteSpace(ship.CharacterName)
+                || staticObjectsById.ContainsKey(ship.ShipId)
                 || !shipsByCharacter.TryAdd(
                     ship.CharacterId,
                     new SolarShipState(
                         ship.CharacterId,
+                        ship.CharacterName,
                         ship.ShipId,
                         context.SolarSystemId,
                         context.Epoch,
                         tick,
                         ship.Position,
-                        ship.Velocity))
+                        ship.Velocity,
+                        ship.MovementProfile ?? throw new InvalidDataException(
+                            "The solar-system snapshot is missing build-pinned ship movement Dogma.")))
                 || !charactersByShip.TryAdd(ship.ShipId, ship.CharacterId))
             {
                 throw new InvalidDataException("The solar-system snapshot contains duplicate or invalid ship identities.");
@@ -347,5 +384,21 @@ internal sealed class SolarSystemState
                     error);
             }
         }
+    }
+
+    private static IReadOnlyDictionary<long, SolarSystemObjectState> ValidateStaticObjects(
+        SolarSystemRuntimeContext context,
+        IReadOnlyList<SolarSystemObjectState> staticObjects)
+    {
+        if (staticObjects.Any(item => item.SolarSystemId != context.SolarSystemId)
+            || staticObjects.Select(item => item.EntityId).Distinct().Count() != staticObjects.Count)
+        {
+            throw new InvalidDataException(
+                "Authored solar-system objects contain a foreign partition or duplicate identity.");
+        }
+
+        return staticObjects
+            .OrderBy(item => item.EntityId)
+            .ToDictionary(item => item.EntityId);
     }
 }

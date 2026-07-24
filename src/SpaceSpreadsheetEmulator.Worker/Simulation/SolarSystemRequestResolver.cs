@@ -1,5 +1,6 @@
 using Google.Protobuf;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V2;
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
@@ -14,7 +15,8 @@ namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 internal sealed class SolarSystemRequestResolver(
     LoginTicketRegistry tickets,
     ICharacterStateReader characters,
-    ISolarSystemRuntimeRegistry runtimes)
+    ISolarSystemRuntimeRegistry runtimes,
+    IDogmaShipMovementProfileResolver movementProfiles)
 {
     public async Task<SolarSystemRequestResolution> ResolveAsync(
         GameplayRequestContext? context,
@@ -76,7 +78,9 @@ internal sealed class SolarSystemRequestResolver(
             new SolarCharacter(
                 selected.CharacterId,
                 selected.ShipId,
-                runtime.Context.SolarSystemId));
+                runtime.Context.SolarSystemId,
+                movementProfiles.Resolve(selected.ShipTypeId),
+                selected.CharacterName));
     }
 }
 

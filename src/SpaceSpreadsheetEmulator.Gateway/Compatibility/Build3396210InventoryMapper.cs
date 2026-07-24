@@ -110,6 +110,47 @@ internal static class Build3396210InventoryMapper
             ("singleton", "eve.common.script.sys.eveCfg.Singleton"));
     }
 
+    public static PyPackedRow CreateInventoryItem(CharacterInventoryItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        int wireFlag = item.Flag switch
+        {
+            CharacterInventoryItemFlag.StationHangar
+                when item.LocationKind == CharacterInventoryLocationKind.Station => 4,
+            CharacterInventoryItemFlag.ShipCargo
+                when item.LocationKind == CharacterInventoryLocationKind.Item => 5,
+            _ => throw new ArgumentException(
+                "The inventory item has an unsupported location and role.",
+                nameof(item)),
+        };
+        if (item.ItemId <= 0
+            || item.TypeId <= 0
+            || item.OwnerId <= 0
+            || item.LocationId <= 0
+            || item.Quantity <= 0
+            || item.GroupId <= 0
+            || item.CategoryId <= 0)
+        {
+            throw new ArgumentException("The inventory item is incomplete.", nameof(item));
+        }
+
+        return Build3396210PackedRowBuilder.CreateRow(
+            ItemFields,
+            [
+                new PyInteger(item.ItemId),
+                new PyInteger(item.TypeId),
+                new PyInteger(item.OwnerId),
+                new PyInteger(item.LocationId),
+                new PyInteger(wireFlag),
+                new PyInteger(item.Singleton ? -1 : item.Quantity),
+                new PyInteger(item.GroupId),
+                new PyInteger(item.CategoryId),
+                new PyBuffer(ReadOnlySpan<byte>.Empty),
+            ],
+            ("stacksize", "eve.common.script.sys.eveCfg.StackSize"),
+            ("singleton", "eve.common.script.sys.eveCfg.Singleton"));
+    }
+
     public static PyExtendedObject CreateItemSet(params PyValue[] items)
     {
         ArgumentNullException.ThrowIfNull(items);

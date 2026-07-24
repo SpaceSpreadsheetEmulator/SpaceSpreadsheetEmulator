@@ -133,7 +133,7 @@ internal sealed class GameDbContext(DbContextOptions<GameDbContext> options) : D
             table.HasCheckConstraint("ck_items_positive_ids",
                 "item_id > 0 AND type_id > 0 AND owner_id > 0 AND location_id > 0");
             table.HasCheckConstraint("ck_items_location_kind", "location_kind IN (1, 2, 3, 4)");
-            table.HasCheckConstraint("ck_items_flag", "flag IN (0, 1)");
+            table.HasCheckConstraint("ck_items_flag", "flag IN (0, 1, 2, 3)");
             table.HasCheckConstraint("ck_items_quantity_positive", "quantity > 0");
             table.HasCheckConstraint("ck_items_singleton_quantity", "NOT singleton OR quantity = 1");
             table.HasCheckConstraint("ck_items_version_positive", "version > 0");

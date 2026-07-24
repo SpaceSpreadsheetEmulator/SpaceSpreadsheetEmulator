@@ -121,8 +121,28 @@ internal sealed partial class GatewayClientConnection
             && itemId == character.StationId
             && flag is null or 4)
         {
+            var items = new List<PyValue>
+            {
+                Build3396210InventoryMapper.CreateActiveShip(character),
+            };
+            items.AddRange(character.InventoryItems
+                .Where(item => item.Flag == CharacterInventoryItemFlag.StationHangar)
+                .OrderBy(item => item.ItemId)
+                .Select(Build3396210InventoryMapper.CreateInventoryItem));
+            return Result(Build3396210InventoryMapper.CreateItemSet([.. items]));
+        }
+
+        if (selectedCharacter is not null
+            && itemId == selectedCharacter.ShipId
+            && flag is null or 5)
+        {
             return Result(Build3396210InventoryMapper.CreateItemSet(
-                Build3396210InventoryMapper.CreateActiveShip(character)));
+                selectedCharacter.InventoryItems
+                    .Where(item => item.Flag == CharacterInventoryItemFlag.ShipCargo)
+                    .OrderBy(item => item.ItemId)
+                    .Select(Build3396210InventoryMapper.CreateInventoryItem)
+                    .Cast<PyValue>()
+                    .ToArray()));
         }
 
         return Result(Build3396210InventoryMapper.CreateEmptyItemSet());

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using SpaceSpreadsheetEmulator.Content.Characters;
+using SpaceSpreadsheetEmulator.Dogma.Definitions;
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
 using SpaceSpreadsheetEmulator.Gameplay.Stations;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
@@ -38,8 +40,6 @@ builder.Services.AddOptions<WorkerSolarSystemOptions>()
         "Worker solar-system session-event queue capacity must be positive.")
     .Validate(options => options.CheckpointIntervalSeconds > 0,
         "Worker solar-system checkpoint interval must be positive.")
-    .Validate(options => double.IsFinite(options.ManeuverSpeed) && options.ManeuverSpeed > 0,
-        "Worker solar-system maneuver speed must be finite and positive.")
     .Validate(options => options.HasValidAssignments(),
         "Worker solar-system assignments require unique positive system IDs and epochs plus unique finite station entry points.")
     .ValidateOnStart();
@@ -83,6 +83,15 @@ if (loginOptions.Enabled)
     builder.Services.AddSingleton<ITypeDefinitionQuery>(staticData);
     builder.Services.AddSingleton<IDogmaStaticDataQuery>(staticData);
     builder.Services.AddSingleton(template);
+    if (solarOptions.Enabled)
+    {
+        DogmaDefinitionCatalog dogma = await DogmaDefinitionCatalog.LoadAsync(
+            staticData,
+            [template.ShipTypeId]);
+        builder.Services.AddSingleton<IDogmaDefinitionCatalog>(dogma);
+        builder.Services.AddSingleton<IDogmaShipMovementProfileResolver, DogmaShipMovementProfileResolver>();
+    }
+
     builder.Services.AddSingleton<IAccountAuthenticator>(services =>
         new InMemoryAccountAuthenticator(
             services.GetRequiredService<IAccountIdentityStore>(),

@@ -106,7 +106,29 @@ message SessionEventEnvelope {
 
 // Establishes the authoritative starting view for subsequent deltas.
 message SessionSnapshot {
+  // Dynamic ships present when the subscription begins.
   repeated SolarShipState entities = 1;
+  // Immutable authored objects present in the owned solar system.
+  repeated SolarSystemObjectState static_objects = 2;
+}
+
+// Identifies an immutable, targetable object in one solar system.
+message SolarSystemObjectState {
+  int64 entity_id = 1;
+  int32 type_id = 2;
+  string name = 3;
+  SolarSystemObjectKind kind = 4;
+  int32 solar_system_id = 5;
+  SolarVector3 position = 6;
+  double radius = 7;
+  optional int32 destination_solar_system_id = 8;
+}
+
+enum SolarSystemObjectKind {
+  SOLAR_SYSTEM_OBJECT_KIND_UNSPECIFIED = 0;
+  SOLAR_SYSTEM_OBJECT_KIND_STATION = 1;
+  SOLAR_SYSTEM_OBJECT_KIND_PLANET = 2;
+  SOLAR_SYSTEM_OBJECT_KIND_JUMP_GATE = 3;
 }
 
 // Identifies an entity which is no longer visible in the subscribed system.
@@ -124,6 +146,7 @@ message SolarShipState {
   uint64 tick = 5;
   SolarVector3 position = 6;
   SolarVector3 velocity = 7;
+  string character_name = 8;
 }
 
 message SolarVector3 {

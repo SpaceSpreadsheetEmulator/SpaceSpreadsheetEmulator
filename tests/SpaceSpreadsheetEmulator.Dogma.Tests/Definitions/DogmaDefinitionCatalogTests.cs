@@ -1,4 +1,5 @@
 using SpaceSpreadsheetEmulator.Dogma.Definitions;
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.StaticData;
 
 namespace SpaceSpreadsheetEmulator.Dogma.Tests.Definitions;
@@ -50,6 +51,7 @@ public sealed class DogmaDefinitionCatalogTests
             [
                 Attribute(37, "duplicate"),
                 Attribute(38, "duplicate"),
+                Attribute(70, "agility"),
             ],
         };
 
@@ -59,15 +61,55 @@ public sealed class DogmaDefinitionCatalogTests
         Assert.Equal(37, catalog.FindAttribute(37)!.AttributeId);
     }
 
+    [Fact]
+    public async Task ShipMovementProfileUsesBuildPinnedMassInertiaAndMaximumVelocity()
+    {
+        await using var source = new TestStaticDataStore();
+        DogmaDefinitionCatalog catalog = await DogmaDefinitionCatalog.LoadAsync(source, [601]);
+        var resolver = new DogmaShipMovementProfileResolver(catalog);
+
+        DogmaShipMovementProfile profile = resolver.Resolve(601);
+
+        Assert.Equal(601, profile.ShipTypeId);
+        Assert.Equal(1_163_000, profile.Mass);
+        Assert.Equal(4.5, profile.InertiaModifier);
+        Assert.Equal(295, profile.MaximumVelocity);
+        Assert.Equal(5.2335, profile.ResponseTimeSeconds, precision: 4);
+    }
+
+    [Fact]
+    public async Task ShipMovementProfileRejectsMissingRequiredDogma()
+    {
+        await using var source = new TestStaticDataStore
+        {
+            TypeDogma = new TypeDogmaDefinition(
+                601,
+                [new TypeDogmaAttributeValue(37, 295)],
+                []),
+        };
+        DogmaDefinitionCatalog catalog = await DogmaDefinitionCatalog.LoadAsync(source, [601]);
+        var resolver = new DogmaShipMovementProfileResolver(catalog);
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => resolver.Resolve(601));
+
+        Assert.Contains("agility", error.Message, StringComparison.Ordinal);
+    }
+
     private sealed class TestStaticDataStore : IStaticDataStore
     {
         public TypeDogmaDefinition TypeDogma { get; init; } = new(
             601,
-            [new TypeDogmaAttributeValue(37, 295)],
+            [
+                new TypeDogmaAttributeValue(37, 295),
+                new TypeDogmaAttributeValue(70, 4.5),
+            ],
             [new TypeDogmaEffectReference(5000, false)]);
 
         public IReadOnlyList<DogmaAttributeDefinition> AttributeDefinitions { get; init; } =
-            [Attribute(37, "maxVelocity")];
+            [
+                Attribute(37, "maxVelocity"),
+                Attribute(70, "agility"),
+            ];
 
         public CompatibilityManifest Compatibility { get; } = new(
             3_396_210,

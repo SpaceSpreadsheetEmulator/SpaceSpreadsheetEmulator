@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Persistence.Database;
 using SpaceSpreadsheetEmulator.Persistence.Entities;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
@@ -124,7 +125,10 @@ internal sealed class PostgreSqlSolarSystemSnapshotStore(
         ArgumentNullException.ThrowIfNull(snapshot);
         if (snapshot.FormatVersion != SolarSystemSnapshot.CurrentFormatVersion
             || snapshot.SourceEpoch.Value == 0
-            || snapshot.Ships.Any(ship => ship.ShipId <= 0)
+            || snapshot.Ships.Any(ship =>
+                ship.ShipId <= 0
+                || string.IsNullOrWhiteSpace(ship.CharacterName)
+                || ship.MovementProfile is null)
             || snapshot.Ships.Select(ship => ship.CharacterId).Distinct().Count() != snapshot.Ships.Count
             || snapshot.Ships.Select(ship => ship.ShipId).Distinct().Count() != snapshot.Ships.Count)
         {
@@ -146,7 +150,9 @@ internal sealed class PostgreSqlSolarSystemSnapshotStore(
                     ship.ShipId,
                     VectorPayload.From(ship.Position),
                     VectorPayload.From(ship.Velocity),
-                    ship.Movement is null ? null : MovementPayload.From(ship.Movement)))
+                    MovementProfilePayload.From(ship.MovementProfile!),
+                    ship.Movement is null ? null : MovementPayload.From(ship.Movement),
+                    ship.CharacterName))
                 .ToArray());
 
     private static SolarSystemSnapshot Map(SnapshotPayload payload)
@@ -161,7 +167,9 @@ internal sealed class PostgreSqlSolarSystemSnapshotStore(
                     ship.ShipId,
                     ship.Position.ToVector(),
                     ship.Velocity.ToVector(),
-                    ship.Movement?.ToSnapshot()))
+                    ship.MovementProfile?.ToProfile(),
+                    ship.Movement?.ToSnapshot(),
+                    ship.CharacterName ?? string.Empty))
                 .ToArray());
 
     private sealed record SnapshotPayload(
@@ -177,7 +185,26 @@ internal sealed class PostgreSqlSolarSystemSnapshotStore(
         long ShipId,
         VectorPayload Position,
         VectorPayload Velocity,
-        MovementPayload? Movement = null);
+        MovementProfilePayload? MovementProfile = null,
+        MovementPayload? Movement = null,
+        string? CharacterName = null);
+
+    private sealed record MovementProfilePayload(
+        int ShipTypeId,
+        double Mass,
+        double InertiaModifier,
+        double MaximumVelocity)
+    {
+        public static MovementProfilePayload From(DogmaShipMovementProfile profile)
+            => new(
+                profile.ShipTypeId,
+                profile.Mass,
+                profile.InertiaModifier,
+                profile.MaximumVelocity);
+
+        public DogmaShipMovementProfile ToProfile()
+            => new(ShipTypeId, Mass, InertiaModifier, MaximumVelocity);
+    }
 
     private sealed record MovementPayload(
         SolarMovementIntentKind Kind,

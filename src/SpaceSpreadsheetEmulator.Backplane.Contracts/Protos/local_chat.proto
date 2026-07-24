@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package backplane.chat.v1;
+option csharp_namespace = "SpaceSpreadsheetEmulator.Backplane.Contracts.Chat.V1";
+
+service LocalChat {
+  rpc Join (LocalChatPresenceRequest) returns (LocalChatMembershipResult);
+  rpc Leave (LocalChatPresenceRequest) returns (LocalChatMembershipResult);
+  rpc SendMessage (LocalChatMessageRequest) returns (LocalChatMessageResult);
+  rpc Subscribe (LocalChatSubscriptionRequest) returns (stream LocalChatEventEnvelope);
+}
+
+message LocalChatPresenceRequest {
+  int32 solar_system_id = 1;
+  string gateway_id = 2;
+  uint64 gateway_session_id = 3;
+  int64 character_id = 4;
+  string character_name = 5;
+}
+
+message LocalChatMembershipResult {
+  bool changed = 1;
+  uint64 sequence = 2;
+  LocalChatError error = 3;
+}
+
+message LocalChatMessageRequest {
+  int32 solar_system_id = 1;
+  string gateway_id = 2;
+  uint64 gateway_session_id = 3;
+  string message_id = 4;
+  string text = 5;
+}
+
+message LocalChatMessageResult {
+  LocalChatMessage message = 1;
+  bool already_applied = 2;
+  LocalChatError error = 3;
+}
+
+message LocalChatSubscriptionRequest {
+  int32 solar_system_id = 1;
+  int32 queue_capacity = 2;
+}
+
+message LocalChatEventEnvelope {
+  int32 solar_system_id = 1;
+  uint64 sequence = 2;
+  oneof payload {
+    LocalChatSnapshot snapshot = 3;
+    LocalChatMember member_joined = 4;
+    LocalChatMember member_left = 5;
+    LocalChatMessage message_posted = 6;
+  }
+}
+
+message LocalChatSnapshot {
+  repeated LocalChatMember members = 1;
+}
+
+message LocalChatMember {
+  string gateway_id = 1;
+  uint64 gateway_session_id = 2;
+  int64 character_id = 3;
+  string character_name = 4;
+}
+
+message LocalChatMessage {
+  string message_id = 1;
+  int64 character_id = 2;
+  string character_name = 3;
+  string text = 4;
+  int64 sent_at_unix_milliseconds = 5;
+}
+
+message LocalChatError {
+  string code = 1;
+  string message = 2;
+}

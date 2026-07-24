@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Content/SpaceSpreadsheetEmulator.Content.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Inventory/SpaceSpreadsheetEmulator.Inventory.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.StaticData/SpaceSpreadsheetEmulator.StaticData.csproj" />
   </ItemGroup>

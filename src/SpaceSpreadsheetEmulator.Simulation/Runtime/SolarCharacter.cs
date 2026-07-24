@@ -1,3 +1,4 @@
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
@@ -8,7 +9,9 @@ namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
 public sealed record SolarCharacter(
     CharacterId CharacterId,
     long ShipId,
-    SolarSystemId SolarSystemId);
+    SolarSystemId SolarSystemId,
+    DogmaShipMovementProfile MovementProfile,
+    string CharacterName);
 
 /// <summary>
 /// Describes a character's authoritative docked or in-space location after a transition.

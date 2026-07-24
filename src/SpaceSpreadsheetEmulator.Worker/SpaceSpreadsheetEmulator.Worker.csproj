@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Backplane.Contracts/SpaceSpreadsheetEmulator.Backplane.Contracts.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Content/SpaceSpreadsheetEmulator.Content.csproj" />
+    <ProjectReference Include="../SpaceSpreadsheetEmulator.Dogma/SpaceSpreadsheetEmulator.Dogma.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Gameplay/SpaceSpreadsheetEmulator.Gameplay.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
     <ProjectReference Include="../SpaceSpreadsheetEmulator.Persistence/SpaceSpreadsheetEmulator.Persistence.csproj" />

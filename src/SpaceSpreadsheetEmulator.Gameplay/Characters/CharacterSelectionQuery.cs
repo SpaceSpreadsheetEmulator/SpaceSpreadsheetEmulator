@@ -1,5 +1,6 @@
 using SpaceSpreadsheetEmulator.Content.Characters;
 using SpaceSpreadsheetEmulator.Identity.Authentication;
+using SpaceSpreadsheetEmulator.Inventory.Items;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.StaticData;
 
@@ -33,7 +34,10 @@ public sealed class CharacterSelectionQuery(
                 template.ConstellationId,
                 template.RegionId,
                 template.ShipTypeId,
-                template.ShipName),
+                template.ShipName,
+                (template.InventoryItems ?? [])
+                    .Select(MapInventoryDefinition)
+                    .ToArray()),
             timeProvider.GetUtcNow(),
             cancellationToken);
         StaticDataRecord corporation = await RequiredAsync(
@@ -93,6 +97,9 @@ public sealed class CharacterSelectionQuery(
         long shipCategoryId = shipGroup.ParentId
             ?? throw new InvalidDataException(
                 $"Required category relationship for group/{shipGroup.Id} is missing.");
+        IReadOnlyList<CharacterInventoryItem> inventoryItems = await MapInventoryAsync(
+            character.InventoryItems,
+            cancellationToken);
         return new CharacterSelection(account.AccountId,
         [
             new CharacterSummary(
@@ -125,9 +132,57 @@ public sealed class CharacterSelectionQuery(
                 character.ShipName,
                 template.StartingBalance,
                 template.StartingSkillPoints,
-                character.LastLoginAt),
+                character.LastLoginAt,
+                inventoryItems),
         ]);
     }
+
+    private async ValueTask<IReadOnlyList<CharacterInventoryItem>> MapInventoryAsync(
+        IReadOnlyList<ItemInstance> items,
+        CancellationToken cancellationToken)
+    {
+        var mapped = new List<CharacterInventoryItem>(items.Count);
+        foreach (ItemInstance item in items.OrderBy(item => item.ItemId.Value))
+        {
+            StaticDataRecord type = await RequiredAsync(
+                StaticDataEntityKind.Type,
+                item.TypeId,
+                cancellationToken);
+            long groupId = RequiredRelationship(type, type.ParentId, "group");
+            StaticDataRecord group = await RequiredAsync(
+                StaticDataEntityKind.Group,
+                groupId,
+                cancellationToken);
+            long categoryId = RequiredRelationship(group, group.ParentId, "category");
+            mapped.Add(new CharacterInventoryItem(
+                item.ItemId.Value,
+                item.TypeId,
+                item.OwnerId,
+                item.LocationId,
+                item.LocationKind,
+                item.Flag,
+                item.Quantity,
+                item.Singleton,
+                item.CustomName,
+                checked((int)groupId),
+                checked((int)categoryId)));
+        }
+
+        return mapped;
+    }
+
+    private static StarterInventoryItemDefinition MapInventoryDefinition(
+        StarterInventoryItemTemplate item)
+        => new(
+            item.TypeId,
+            item.Quantity,
+            item.Location switch
+            {
+                StarterInventoryItemLocation.StationHangar => InventoryItemFlag.StationHangar,
+                StarterInventoryItemLocation.ShipCargo => InventoryItemFlag.ShipCargo,
+                _ => throw new InvalidDataException(
+                    $"Unsupported starter inventory location {item.Location}."),
+            });
 
     private async ValueTask<StaticDataRecord> RequiredAsync(
         StaticDataEntityKind kind,

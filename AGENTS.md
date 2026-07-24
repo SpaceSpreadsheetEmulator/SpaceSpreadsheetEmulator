@@ -108,3 +108,6 @@ specifications. Record uncertainty rather than filling gaps from a reference ser
 - Do not commit or push unless requested. When committing, verify the staged file
   list contains no plan, capture, credential, certificate, key, or research corpus.
 - When pushing, use the repository's configured Git remote with `git push`.
+
+# IMPORTAINT
+Please refer to possible additional instructions under the _local/ folder.

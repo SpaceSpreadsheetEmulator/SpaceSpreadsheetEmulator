@@ -1,4 +1,5 @@
 using SpaceSpreadsheetEmulator.Identity.Authentication;
+using SpaceSpreadsheetEmulator.Inventory.Items;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Gameplay.Characters;
@@ -43,7 +44,24 @@ public sealed record CharacterSummary(
     string ShipName,
     decimal Balance,
     long SkillPoints,
-    DateTimeOffset LastLoginAt);
+    DateTimeOffset LastLoginAt,
+    IReadOnlyList<CharacterInventoryItem> InventoryItems);
+
+/// <summary>
+/// Describes one durable starter item included in character inventory views.
+/// </summary>
+public sealed record CharacterInventoryItem(
+    long ItemId,
+    int TypeId,
+    long OwnerId,
+    long LocationId,
+    InventoryLocationKind LocationKind,
+    InventoryItemFlag Flag,
+    long Quantity,
+    bool Singleton,
+    string? CustomName,
+    int GroupId,
+    int CategoryId);
 
 /// <summary>
 /// Loads the character-selection view for an authenticated account.
@@ -70,7 +88,16 @@ public sealed record StarterCharacterDefinition(
     int ConstellationId,
     int RegionId,
     int ShipTypeId,
-    string ShipName);
+    string ShipName,
+    IReadOnlyList<StarterInventoryItemDefinition>? InventoryItems = null);
+
+/// <summary>
+/// Defines one durable item created atomically with a starter character.
+/// </summary>
+public sealed record StarterInventoryItemDefinition(
+    int TypeId,
+    long Quantity,
+    InventoryItemFlag Flag);
 
 /// <summary>
 /// Contains the persisted identity and starter-state values used by character selection.
@@ -90,7 +117,8 @@ public sealed record StoredStarterCharacter(
     long ShipId,
     int ShipTypeId,
     string ShipName,
-    DateTimeOffset LastLoginAt);
+    DateTimeOffset LastLoginAt,
+    IReadOnlyList<ItemInstance> InventoryItems);
 
 /// <summary>
 /// Loads or atomically provisions the durable starter state for an account.

@@ -12,6 +12,7 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Dogma/SpaceSpreadsheetEmulator.Dogma.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Primitives/SpaceSpreadsheetEmulator.Primitives.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Simulation/SpaceSpreadsheetEmulator.Simulation.csproj" />
   </ItemGroup>

@@ -9,7 +9,8 @@ public abstract record SolarSystemEvent(ulong Sequence);
 
 public sealed record SolarSystemSessionSnapshot(
     ulong Sequence,
-    IReadOnlyList<SolarShipState> Entities) : SolarSystemEvent(Sequence);
+    IReadOnlyList<SolarShipState> Ships,
+    IReadOnlyList<SolarSystemObjectState> StaticObjects) : SolarSystemEvent(Sequence);
 
 public sealed record SolarSystemEntityEntered(
     ulong Sequence,

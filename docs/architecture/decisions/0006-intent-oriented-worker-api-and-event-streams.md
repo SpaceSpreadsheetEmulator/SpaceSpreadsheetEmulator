@@ -133,8 +133,9 @@ generic rules, common, helpers, or service-registry assembly.
   bytes, or bound-object identifiers to Worker.
 - Build-3396210 direction, stop, follow/approach/keep-at-range, orbit, and go-to-point
   calls map to the same versioned movement-intent command. The current Worker uses a
-  deterministic bounded-speed controller; acceleration, ship-specific maximum
-  velocity, collision, and full flight-model fidelity are future simulation rules.
+  deterministic controller bounded by each ship's build-pinned Dogma maximum
+  velocity; acceleration, turning, collision, and full flight-model fidelity remain
+  future simulation rules.
 - One connection-level sequencer atomically queues response/notification batches
   from RPC and stream producers. Undock location change precedes the ship bind
   response; dock response precedes acceptance, final simulation cleanup, object

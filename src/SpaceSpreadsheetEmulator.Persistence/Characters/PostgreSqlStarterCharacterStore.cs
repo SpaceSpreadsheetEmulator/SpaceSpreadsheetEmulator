@@ -27,15 +27,6 @@ internal sealed class PostgreSqlStarterCharacterStore(
             try
             {
                 await using GameDbContext context = await contextFactory.CreateDbContextAsync(cancellationToken);
-                StoredStarterCharacter? stored = await FindAsync(
-                    context,
-                    accountId,
-                    cancellationToken);
-                if (stored is not null)
-                {
-                    return stored;
-                }
-
                 await using var transaction = await context.Database.BeginTransactionAsync(
                     IsolationLevel.Serializable,
                     cancellationToken);
@@ -48,8 +39,17 @@ internal sealed class PostgreSqlStarterCharacterStore(
                         context,
                         existing.ActiveShipItemId,
                         cancellationToken);
+                    IReadOnlyList<InventoryItemEntity> existingInventory =
+                        await EnsureStarterInventoryAsync(
+                            context,
+                            existing,
+                            existingItem,
+                            definition.InventoryItems ?? [],
+                            selectedAt,
+                            cancellationToken);
+                    await context.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
-                    return Map(existing, existingItem);
+                    return Map(existing, existingItem, existingInventory);
                 }
 
                 var character = new CharacterEntity
@@ -89,23 +89,18 @@ internal sealed class PostgreSqlStarterCharacterStore(
                 };
                 await context.Items.AddAsync(item, cancellationToken);
                 character.ActiveShipItemId = item.ItemId;
-                _ = new ItemInstance(
-                    new ItemId(item.ItemId),
-                    item.TypeId,
-                    item.OwnerId,
-                    item.LocationId,
-                    (InventoryLocationKind)item.LocationKind,
-                    (InventoryItemFlag)item.Flag,
-                    item.Quantity,
-                    item.Singleton,
-                    item.CustomName,
-                    item.Version,
-                    item.CreatedAt,
-                    item.UpdatedAt);
+                IReadOnlyList<InventoryItemEntity> inventory =
+                    await EnsureStarterInventoryAsync(
+                        context,
+                        character,
+                        item,
+                        definition.InventoryItems ?? [],
+                        selectedAt,
+                        cancellationToken);
 
                 await context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return Map(character, item);
+                return Map(character, item, inventory);
             }
             catch (Exception error) when (
                 attempt < MaximumAttempts
@@ -115,26 +110,88 @@ internal sealed class PostgreSqlStarterCharacterStore(
         }
     }
 
-    private static async Task<StoredStarterCharacter?> FindAsync(
+    private static async Task<IReadOnlyList<InventoryItemEntity>> EnsureStarterInventoryAsync(
         GameDbContext context,
-        AccountId accountId,
+        CharacterEntity character,
+        InventoryItemEntity activeShip,
+        IReadOnlyList<StarterInventoryItemDefinition> definitions,
+        DateTimeOffset createdAt,
         CancellationToken cancellationToken)
     {
-        CharacterEntity? character = await context.Characters
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                candidate => candidate.AccountId == accountId.Value,
-                cancellationToken);
-        if (character is null)
+        var definitionKeys = new HashSet<(InventoryItemFlag Flag, int TypeId)>();
+        foreach (StarterInventoryItemDefinition definition in definitions)
         {
-            return null;
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(definition.TypeId);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(definition.Quantity);
+            if (definition.Flag is not (
+                InventoryItemFlag.StationHangar or InventoryItemFlag.ShipCargo))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(definitions),
+                    $"Unsupported starter inventory flag {definition.Flag}.");
+            }
+
+            if (!definitionKeys.Add((definition.Flag, definition.TypeId)))
+            {
+                throw new InvalidDataException(
+                    $"Duplicate starter inventory definition {definition.Flag}/{definition.TypeId}.");
+            }
         }
 
-        InventoryItemEntity item = await RequiredItemAsync(
-            context,
-            character.ActiveShipItemId,
-            cancellationToken);
-        return Map(character, item);
+        InventoryItemEntity[] existing = await context.Items
+            .Where(item =>
+                item.OwnerId == character.CharacterId
+                && item.ItemId != activeShip.ItemId
+                && (item.Flag == (short)InventoryItemFlag.StationHangar
+                    || item.Flag == (short)InventoryItemFlag.ShipCargo))
+            .OrderBy(item => item.ItemId)
+            .ToArrayAsync(cancellationToken);
+        var result = new List<InventoryItemEntity>(definitions.Count);
+        foreach (StarterInventoryItemDefinition definition in definitions)
+        {
+            InventoryItemEntity[] matching = existing
+                .Where(item =>
+                    item.TypeId == definition.TypeId
+                    && item.Flag == (short)definition.Flag)
+                .ToArray();
+            if (matching.Length > 1)
+            {
+                throw new InvalidDataException(
+                    $"Starter inventory contains duplicate durable items "
+                    + $"{definition.Flag}/{definition.TypeId}.");
+            }
+
+            if (matching.Length == 1)
+            {
+                result.Add(matching[0]);
+                continue;
+            }
+
+            var item = new InventoryItemEntity
+            {
+                TypeId = definition.TypeId,
+                OwnerId = character.CharacterId,
+                LocationId = definition.Flag == InventoryItemFlag.StationHangar
+                    ? character.StationId
+                        ?? throw new InvalidDataException(
+                            "A station-hangar starter item requires a docked character.")
+                    : activeShip.ItemId,
+                LocationKind = (short)(definition.Flag == InventoryItemFlag.StationHangar
+                    ? InventoryLocationKind.Station
+                    : InventoryLocationKind.Item),
+                Flag = (short)definition.Flag,
+                Quantity = definition.Quantity,
+                Singleton = false,
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt,
+                Version = 1,
+            };
+            await context.Items.AddAsync(item, cancellationToken);
+            _ = MapItem(item);
+            result.Add(item);
+        }
+
+        return result;
     }
 
     private static async Task<InventoryItemEntity> RequiredItemAsync(
@@ -148,7 +205,8 @@ internal sealed class PostgreSqlStarterCharacterStore(
 
     private static StoredStarterCharacter Map(
         CharacterEntity character,
-        InventoryItemEntity item)
+        InventoryItemEntity item,
+        IReadOnlyList<InventoryItemEntity> inventory)
         => new(
             new CharacterId(character.CharacterId),
             character.Name,
@@ -164,5 +222,24 @@ internal sealed class PostgreSqlStarterCharacterStore(
             item.ItemId,
             item.TypeId,
             item.CustomName ?? string.Empty,
-            character.LastLoginAt);
+            character.LastLoginAt,
+            inventory
+                .OrderBy(candidate => candidate.ItemId)
+                .Select(MapItem)
+                .ToArray());
+
+    private static ItemInstance MapItem(InventoryItemEntity item)
+        => new(
+            new ItemId(item.ItemId),
+            item.TypeId,
+            item.OwnerId,
+            item.LocationId,
+            (InventoryLocationKind)item.LocationKind,
+            (InventoryItemFlag)item.Flag,
+            item.Quantity,
+            item.Singleton,
+            item.CustomName,
+            item.Version,
+            item.CreatedAt,
+            item.UpdatedAt);
 }

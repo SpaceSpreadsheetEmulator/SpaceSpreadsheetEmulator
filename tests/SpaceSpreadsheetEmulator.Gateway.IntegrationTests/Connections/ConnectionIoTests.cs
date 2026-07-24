@@ -393,10 +393,14 @@ public class ConnectionIoTests
         Assert.Equal(1, stationItems.Variant);
         PyTuple stationItemsHeader = Assert.IsType<PyTuple>(stationItems.Header);
         Assert.Equal("__builtin__.set", Text(stationItemsHeader.Items[0]));
-        PyPackedRow dockedShip = Assert.IsType<PyPackedRow>(Assert.Single(
-            Assert.IsType<PyList>(
-                Assert.IsType<PyTuple>(stationItemsHeader.Items[1]).Items[0]).Items));
-        IReadOnlyDictionary<string, PyValue> dockedShipRow = PackedRowTestReader.Read(dockedShip);
+        PyList stationItemRows = Assert.IsType<PyList>(
+            Assert.IsType<PyTuple>(stationItemsHeader.Items[1]).Items[0]);
+        Assert.Equal(2, stationItemRows.Items.Length);
+        IReadOnlyDictionary<long, IReadOnlyDictionary<string, PyValue>> stationRows =
+            stationItemRows.Items
+                .Select(item => PackedRowTestReader.Read(Assert.IsType<PyPackedRow>(item)))
+                .ToDictionary(item => Integer(item, "itemID"));
+        IReadOnlyDictionary<string, PyValue> dockedShipRow = stationRows[190_000_007];
         Assert.Equal(190_000_007, Integer(dockedShipRow, "itemID"));
         Assert.Equal(601, Integer(dockedShipRow, "typeID"));
         Assert.Equal(90_000_007, Integer(dockedShipRow, "ownerID"));
@@ -405,6 +409,14 @@ public class ConnectionIoTests
         Assert.Equal(-1, Integer(dockedShipRow, "quantity"));
         Assert.Equal(25, Integer(dockedShipRow, "groupID"));
         Assert.Equal(6, Integer(dockedShipRow, "categoryID"));
+        IReadOnlyDictionary<string, PyValue> hangarItemRow = stationRows[190_000_008];
+        Assert.Equal(34, Integer(hangarItemRow, "typeID"));
+        Assert.Equal(90_000_007, Integer(hangarItemRow, "ownerID"));
+        Assert.Equal(60_000_004, Integer(hangarItemRow, "locationID"));
+        Assert.Equal(4, Integer(hangarItemRow, "flagID"));
+        Assert.Equal(100, Integer(hangarItemRow, "quantity"));
+        Assert.Equal(18, Integer(hangarItemRow, "groupID"));
+        Assert.Equal(4, Integer(hangarItemRow, "categoryID"));
         IReadOnlyDictionary<string, PyValue> stationInventoryRow = PackedRowTestReader.Read(
             Assert.IsType<PyPackedRow>(await client.CallAsync(
                 service: null,
@@ -460,15 +472,25 @@ public class ConnectionIoTests
                     new PyBuffer("GetInventory"u8),
                     new PyTuple(new PyInteger(10_004), PyNull.Instance),
                     new PyDictionary()))));
-        PyExtendedObject emptyShipInventory = Assert.IsType<PyExtendedObject>(
+        PyExtendedObject shipInventory = Assert.IsType<PyExtendedObject>(
             await client.CallAsync(
                 service: null,
                 "List",
                 new PyTuple(),
                 shipBinding));
-        PyTuple emptyShipInventoryHeader = Assert.IsType<PyTuple>(emptyShipInventory.Header);
-        Assert.Empty(Assert.IsType<PyList>(
-            Assert.IsType<PyTuple>(emptyShipInventoryHeader.Items[1]).Items[0]).Items);
+        PyTuple shipInventoryHeader = Assert.IsType<PyTuple>(shipInventory.Header);
+        PyPackedRow cargoItem = Assert.IsType<PyPackedRow>(Assert.Single(
+            Assert.IsType<PyList>(
+                Assert.IsType<PyTuple>(shipInventoryHeader.Items[1]).Items[0]).Items));
+        IReadOnlyDictionary<string, PyValue> cargoItemRow = PackedRowTestReader.Read(cargoItem);
+        Assert.Equal(190_000_009, Integer(cargoItemRow, "itemID"));
+        Assert.Equal(34, Integer(cargoItemRow, "typeID"));
+        Assert.Equal(90_000_007, Integer(cargoItemRow, "ownerID"));
+        Assert.Equal(190_000_007, Integer(cargoItemRow, "locationID"));
+        Assert.Equal(5, Integer(cargoItemRow, "flagID"));
+        Assert.Equal(25, Integer(cargoItemRow, "quantity"));
+        Assert.Equal(18, Integer(cargoItemRow, "groupID"));
+        Assert.Equal(4, Integer(cargoItemRow, "categoryID"));
     }
 
     [Fact]

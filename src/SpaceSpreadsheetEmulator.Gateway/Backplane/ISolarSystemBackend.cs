@@ -79,7 +79,27 @@ public sealed record SolarSystemEntityState(
     double PositionZ,
     double VelocityX,
     double VelocityY,
-    double VelocityZ);
+    double VelocityZ,
+    string CharacterName = "");
+
+public enum SolarSystemStaticObjectKind
+{
+    Station,
+    Planet,
+    JumpGate,
+}
+
+public sealed record SolarSystemStaticObjectState(
+    long EntityId,
+    int TypeId,
+    string Name,
+    SolarSystemStaticObjectKind Kind,
+    int SolarSystemId,
+    double PositionX,
+    double PositionY,
+    double PositionZ,
+    double Radius,
+    int? DestinationSolarSystemId);
 
 public enum SolarSystemSessionEventKind
 {
@@ -101,7 +121,8 @@ public sealed record SolarSystemSessionEvent(
     IReadOnlyList<SolarSystemEntityState> Snapshot,
     SolarSystemEntityState? Entity,
     long? CharacterId,
-    long? ShipId);
+    long? ShipId,
+    IReadOnlyList<SolarSystemStaticObjectState>? StaticObjects = null);
 
 /// <summary>
 /// Defines the Gateway-facing boundary for routed solar-system gameplay operations.

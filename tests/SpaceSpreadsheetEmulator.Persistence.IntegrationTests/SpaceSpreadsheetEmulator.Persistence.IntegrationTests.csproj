@@ -19,6 +19,7 @@
     <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Dogma/SpaceSpreadsheetEmulator.Dogma.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Gameplay/SpaceSpreadsheetEmulator.Gameplay.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Identity/SpaceSpreadsheetEmulator.Identity.csproj" />
     <ProjectReference Include="../../src/SpaceSpreadsheetEmulator.Inventory/SpaceSpreadsheetEmulator.Inventory.csproj" />

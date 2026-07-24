@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Options;
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Gameplay.Characters;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 using SpaceSpreadsheetEmulator.Simulation.Runtime;
+using SpaceSpreadsheetEmulator.StaticData;
 
 namespace SpaceSpreadsheetEmulator.Worker.Simulation;
 
@@ -14,6 +16,8 @@ internal sealed class SolarSystemRuntimeInitializer(
     ICharacterRuntimeRecoveryReader recoveryReader,
     ISolarSystemSnapshotStore snapshots,
     ISolarSystemEntryPointResolver entryPoints,
+    IDogmaShipMovementProfileResolver movementProfiles,
+    ITypeDefinitionQuery types,
     TimeProvider timeProvider)
 {
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -36,6 +40,8 @@ internal sealed class SolarSystemRuntimeInitializer(
             IReadOnlyList<RecoverableInSpaceCharacter> durable =
                 await recoveryReader.ListAsync(solarSystemId, cancellationToken);
             SolarSystemSnapshot reconciled = Reconcile(snapshot, durable, solarSystemId, epoch);
+            IReadOnlyList<SolarSystemObjectState> staticObjects =
+                await LoadStaticObjectsAsync(assignment, solarSystemId, cancellationToken);
             runtimes.Add(new SolarSystemRuntime(
                 new SolarSystemRuntimeContext(
                     solarSystemId,
@@ -45,7 +51,7 @@ internal sealed class SolarSystemRuntimeInitializer(
                 new PeriodicSimulationTickSource(timeProvider, TimeSpan.FromSeconds(1)),
                 reconciled,
                 configured.SessionEventQueueCapacity,
-                configured.ManeuverSpeed));
+                staticObjects));
         }
 
         registry.Initialize(runtimes);
@@ -71,7 +77,11 @@ internal sealed class SolarSystemRuntimeInitializer(
                         $"Solar system {solarSystemId} snapshot conflicts with durable ship identity.");
                 }
 
-                ships.Add(existing);
+                ships.Add(existing with
+                {
+                    MovementProfile = movementProfiles.Resolve(state.ShipTypeId),
+                    CharacterName = state.CharacterName,
+                });
                 continue;
             }
 
@@ -81,7 +91,13 @@ internal sealed class SolarSystemRuntimeInitializer(
                     $"Solar system {solarSystemId} has no entry point for station {recoverable.UndockStationId}.");
             }
 
-            ships.Add(new SolarShipSnapshot(state.CharacterId, state.ShipId, entry, SolarVector3.Zero));
+            ships.Add(new SolarShipSnapshot(
+                state.CharacterId,
+                state.ShipId,
+                entry,
+                SolarVector3.Zero,
+                movementProfiles.Resolve(state.ShipTypeId),
+                CharacterName: state.CharacterName));
         }
 
         return new SolarSystemSnapshot(
@@ -92,4 +108,50 @@ internal sealed class SolarSystemRuntimeInitializer(
             snapshot?.LastSequence ?? 0,
             ships);
     }
+
+    private async Task<IReadOnlyList<SolarSystemObjectState>> LoadStaticObjectsAsync(
+        WorkerSolarSystemAssignmentOptions assignment,
+        SolarSystemId solarSystemId,
+        CancellationToken cancellationToken)
+    {
+        var objects = new List<SolarSystemObjectState>(assignment.StaticObjects.Count);
+        foreach (WorkerSolarSystemObjectOptions configured in
+                 assignment.StaticObjects.OrderBy(item => item.EntityId))
+        {
+            StaticTypeDefinition type = await types.FindTypeAsync(
+                    configured.TypeId,
+                    cancellationToken)
+                ?? throw new InvalidDataException(
+                    $"Solar-system object {configured.EntityId} references missing type {configured.TypeId}.");
+            if (type.GroupId != ExpectedGroupId(configured.Kind)
+                || type.Radius is not double radius
+                || !double.IsFinite(radius)
+                || radius <= 0)
+            {
+                throw new InvalidDataException(
+                    $"Solar-system object {configured.EntityId} has an incompatible static type.");
+            }
+
+            objects.Add(new SolarSystemObjectState(
+                configured.EntityId,
+                configured.TypeId,
+                configured.Name,
+                configured.Kind,
+                solarSystemId,
+                new SolarVector3(configured.X, configured.Y, configured.Z),
+                radius,
+                configured.DestinationSolarSystemId));
+        }
+
+        return objects;
+    }
+
+    private static long ExpectedGroupId(SolarSystemObjectKind kind)
+        => kind switch
+        {
+            SolarSystemObjectKind.Station => 15,
+            SolarSystemObjectKind.Planet => 7,
+            SolarSystemObjectKind.JumpGate => 10,
+            _ => throw new InvalidDataException($"Unsupported solar-system object kind {kind}."),
+        };
 }

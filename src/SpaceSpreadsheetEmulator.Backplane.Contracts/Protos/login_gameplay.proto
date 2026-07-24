@@ -99,6 +99,34 @@ message CharacterSummary {
   int32 station_category_id = 28;
   int32 character_group_id = 29;
   int32 character_category_id = 30;
+  repeated CharacterInventoryItem inventory_items = 31;
+}
+
+// Describes one durable character-owned inventory stack.
+message CharacterInventoryItem {
+  int64 item_id = 1;
+  int32 type_id = 2;
+  int64 owner_id = 3;
+  int64 location_id = 4;
+  CharacterInventoryLocationKind location_kind = 5;
+  CharacterInventoryItemFlag flag = 6;
+  int64 quantity = 7;
+  bool singleton = 8;
+  string custom_name = 9;
+  int32 group_id = 10;
+  int32 category_id = 11;
+}
+
+enum CharacterInventoryLocationKind {
+  CHARACTER_INVENTORY_LOCATION_KIND_UNSPECIFIED = 0;
+  CHARACTER_INVENTORY_LOCATION_KIND_STATION = 1;
+  CHARACTER_INVENTORY_LOCATION_KIND_ITEM = 2;
+}
+
+enum CharacterInventoryItemFlag {
+  CHARACTER_INVENTORY_ITEM_FLAG_UNSPECIFIED = 0;
+  CHARACTER_INVENTORY_ITEM_FLAG_STATION_HANGAR = 1;
+  CHARACTER_INVENTORY_ITEM_FLAG_SHIP_CARGO = 2;
 }
 
 // Requests the build-pinned NPC station catalog for a validated login session.

@@ -167,6 +167,15 @@ internal sealed partial class GatewayClientConnection
             ValidateEntity(entity, route);
         }
 
+        foreach (SolarSystemStaticObjectState staticObject in item.StaticObjects ?? [])
+        {
+            if (staticObject.SolarSystemId != route.SolarSystemId)
+            {
+                throw new InvalidDataException(
+                    "Worker emitted an authored object for another solar system.");
+            }
+        }
+
         if (item.Entity is not null)
         {
             ValidateEntity(item.Entity, route);

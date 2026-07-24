@@ -309,7 +309,7 @@ namespace SpaceSpreadsheetEmulator.Persistence.Migrations
 
                     b.ToTable("items", "inventory", t =>
                         {
-                            t.HasCheckConstraint("ck_items_flag", "flag IN (0, 1)");
+                            t.HasCheckConstraint("ck_items_flag", "flag IN (0, 1, 2, 3)");
 
                             t.HasCheckConstraint("ck_items_location_kind", "location_kind IN (1, 2, 3, 4)");
 

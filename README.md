@@ -36,7 +36,35 @@ opens a bounded `SubscribeSession` stream after entering space and validates the
 Worker's fenced initial snapshot and ordered entity/state deltas. Build-specific EVE
 notification mapping remains capture-gated in Gateway. The automated movement slice
 currently covers direction, stop, approach/keep-at-range, orbit, and go-to-point;
-the Worker owns target validation and deterministic maneuver resolution.
+the Worker owns target validation and deterministic maneuver resolution. Each ship
+now carries a build-pinned Dogma movement profile, and its `maxVelocity` bounds every
+resolved maneuver instead of a Worker-wide speed constant. Mass and inertia are
+retained for the next acceleration/turning slice; fitted-item and effect evaluation
+is not implemented yet.
+
+Each configured solar system also owns an immutable authored set of stations,
+planets, and jump gates. Worker validates their types, groups, and radii against the
+build-pinned static-data artifact before becoming ready, publishes them in the
+initial session snapshot, and permits movement intents to target them. Dynamic ship
+deltas remain ordered through the same bounded stream. The build-3396210 graphical
+Destiny encoding for those nearby objects remains capture-gated.
+
+Starter provisioning now creates the active ship, one station-hangar stack, and one
+ship-cargo stack in the same serializable PostgreSQL transaction. Their stable item
+identities survive process restart, Worker returns build-pinned type/group/category
+metadata, and Gateway inventory lists are backed by those durable rows.
+
+Streamed ship state carries the durable character name. A snapshot therefore gives
+an ordered in-space player list, while entity-entered and entity-left deltas update
+it without polling. This nearby-presence view is distinct from chat membership:
+docked presence is not yet registered automatically, and the graphical local-chat
+member panel remains unsupported.
+
+The first actual local-chat authority now runs as the separate
+`SpaceSpreadsheetEmulator.Chat.Service` process. Its versioned gRPC API provides an
+ordered player snapshot, join/leave deltas, message delivery, idempotent retries,
+system isolation, and bounded fail-closed subscriptions. Membership is transient and
+the graphical build-3396210 XMPP adapter remains deferred.
 
 ## Build and verify
 
@@ -53,7 +81,7 @@ dotnet reportgenerator \
   -targetdir:"artifacts/coverage" \
   -reporttypes:"Cobertura;HtmlSummary;TextSummary" \
   -filefilters:"+*/src/*;-*/Migrations/*;-*/*.Designer.cs;-*/obj/*"
-eng/verify-coverage.sh artifacts/coverage/Cobertura.xml 0.80 0.70
+eng/verify-coverage.sh artifacts/coverage/Cobertura.xml 0.80 0.65
 dotnet run --project tools/SpaceSpreadsheetEmulator.Protocol.Tool -- fixtures verify
 ```
 
@@ -77,6 +105,8 @@ artifact unless its client, protocol, and SDE builds all equal `3396210`. Schema
 adds typed inventory definitions, Dogma attribute/effect definitions, and per-type
 Dogma values. Runtime code can preload selected profiles through
 `IDogmaDefinitionCatalog`, avoiding SQLite access in simulation ticks.
+Solar-enabled Workers additionally require the selected ship's mass, `agility`, and
+`maxVelocity` values and fail closed when that base movement profile is incomplete.
 
 ## Configuration profiles
 

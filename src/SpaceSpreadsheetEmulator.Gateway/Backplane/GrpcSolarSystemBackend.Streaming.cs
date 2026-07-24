@@ -4,6 +4,8 @@ using Grpc.Core;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V1;
 using SpaceSpreadsheetEmulator.Backplane.Contracts.V2;
 using ContractShipState = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarShipState;
+using ContractObjectState = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarSystemObjectState;
+using ContractObjectKind = SpaceSpreadsheetEmulator.Backplane.Contracts.V2.SolarSystemObjectKind;
 
 namespace SpaceSpreadsheetEmulator.Gateway.Backplane;
 
@@ -47,6 +49,7 @@ public sealed partial class GrpcSolarSystemBackend
     private static SolarSystemSessionEvent Map(SessionEventEnvelope envelope)
     {
         IReadOnlyList<SolarSystemEntityState> snapshot = [];
+        IReadOnlyList<SolarSystemStaticObjectState> staticObjects = [];
         SolarSystemEntityState? entity = null;
         long? characterId = null;
         long? shipId = null;
@@ -56,6 +59,7 @@ public sealed partial class GrpcSolarSystemBackend
             case SessionEventEnvelope.PayloadOneofCase.Snapshot:
                 kind = SolarSystemSessionEventKind.Snapshot;
                 snapshot = envelope.Snapshot.Entities.Select(Map).ToArray();
+                staticObjects = envelope.Snapshot.StaticObjects.Select(Map).ToArray();
                 break;
             case SessionEventEnvelope.PayloadOneofCase.EntityEntered:
                 kind = SolarSystemSessionEventKind.EntityEntered;
@@ -90,7 +94,8 @@ public sealed partial class GrpcSolarSystemBackend
             snapshot,
             entity,
             characterId,
-            shipId);
+            shipId,
+            staticObjects);
     }
 
     private static SolarSystemEntityState Map(ContractShipState state)
@@ -105,5 +110,26 @@ public sealed partial class GrpcSolarSystemBackend
             state.Position.Z,
             state.Velocity.X,
             state.Velocity.Y,
-            state.Velocity.Z);
+            state.Velocity.Z,
+            state.CharacterName);
+
+    private static SolarSystemStaticObjectState Map(ContractObjectState state)
+        => new(
+            state.EntityId,
+            state.TypeId,
+            state.Name,
+            state.Kind switch
+            {
+                ContractObjectKind.Station => SolarSystemStaticObjectKind.Station,
+                ContractObjectKind.Planet => SolarSystemStaticObjectKind.Planet,
+                ContractObjectKind.JumpGate => SolarSystemStaticObjectKind.JumpGate,
+                _ => throw new InvalidDataException(
+                    $"Worker emitted unsupported solar-system object kind {state.Kind}."),
+            },
+            state.SolarSystemId,
+            state.Position.X,
+            state.Position.Y,
+            state.Position.Z,
+            state.Radius,
+            state.HasDestinationSolarSystemId ? state.DestinationSolarSystemId : null);
 }

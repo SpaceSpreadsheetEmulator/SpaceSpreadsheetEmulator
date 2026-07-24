@@ -7,4 +7,6 @@ public enum InventoryItemFlag : short
 {
     Unspecified = 0,
     ActiveShip = 1,
+    StationHangar = 2,
+    ShipCargo = 3,
 }

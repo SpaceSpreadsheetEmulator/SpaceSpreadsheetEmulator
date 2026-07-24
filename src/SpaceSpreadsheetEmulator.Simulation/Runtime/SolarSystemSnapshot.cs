@@ -1,3 +1,4 @@
+using SpaceSpreadsheetEmulator.Dogma.Movement;
 using SpaceSpreadsheetEmulator.Primitives.Identifiers;
 
 namespace SpaceSpreadsheetEmulator.Simulation.Runtime;
@@ -13,7 +14,7 @@ public sealed record SolarSystemSnapshot(
     ulong LastSequence,
     IReadOnlyList<SolarShipSnapshot> Ships)
 {
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 4;
     public const int MinimumSupportedFormatVersion = 1;
 }
 
@@ -25,7 +26,9 @@ public sealed record SolarShipSnapshot(
     long ShipId,
     SolarVector3 Position,
     SolarVector3 Velocity,
-    SolarMovementSnapshot? Movement = null);
+    DogmaShipMovementProfile? MovementProfile = null,
+    SolarMovementSnapshot? Movement = null,
+    string CharacterName = "");
 
 /// <summary>
 /// Captures the authoritative movement controller assigned to one ship.
