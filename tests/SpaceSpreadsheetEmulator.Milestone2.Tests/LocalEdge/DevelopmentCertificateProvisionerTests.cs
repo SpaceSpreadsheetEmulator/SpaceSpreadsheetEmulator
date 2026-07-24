@@ -24,7 +24,11 @@ public class DevelopmentCertificateProvisionerTests
         LocalEdgeCertificateSet second = DevelopmentCertificateProvisioner.Ensure(options);
         using X509Certificate2 authority = X509CertificateLoader.LoadCertificateFromFile(second.CaCertificatePath);
 
+        Assert.Equal(
+            "SpaceSpreadsheetEmulator Local Development CA",
+            DevelopmentCertificateProvisioner.CompatibleCaCommonName);
         Assert.Contains(DevelopmentCertificateProvisioner.CompatibleCaCommonName, authority.Subject, StringComparison.Ordinal);
+        Assert.Contains("O=SpaceSpreadsheetEmulator", authority.Subject, StringComparison.Ordinal);
         Assert.Equal(firstWrite, File.GetLastWriteTimeUtc(second.CaCertificatePath));
         Assert.True(File.Exists(Path.Combine(options.TrustDirectory, DevelopmentCertificateProvisioner.XmppKeyFileName)));
         Assert.True(File.Exists(Path.Combine(options.GatewayCertificateDirectory, DevelopmentCertificateProvisioner.GatewayKeyFileName)));
